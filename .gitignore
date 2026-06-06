@@ -12,3 +12,13 @@ Makefile*
 # Binary
 GPXSee
 gpxsee
+
+# CMake + vcpkg build (out-of-source) and deploy output
+/build-cmake/
+/build/
+/deploy/
+/vcpkg_installed/
+CMakeUserPresets.json
+
+# Logs
+*.log

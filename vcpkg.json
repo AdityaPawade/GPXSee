@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "gpxsee",
+  "version": "16.8",
+  "description": "GPS log file viewer and analyzer",
+  "builtin-baseline": "1cdb5e0b24c303b41fcac0dce00baf21881f6da2",
+  "dependencies": [
+    "qt5-base",
+    "qt5-svg",
+    "qt5-imageformats",
+    "qt5-multimedia",
+    "qt5-serialport",
+    "qt5-location",
+    "openssl"
+  ]
+}

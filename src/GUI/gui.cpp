@@ -52,7 +52,9 @@
 #include "cadencegraph.h"
 #include "powergraph.h"
 #include "gearratiograph.h"
+#include <QDockWidget>
 #include "mapview.h"
+#include "livestatswidget.h"
 #include "trackinfo.h"
 #include "filebrowser.h"
 #include "graphtab.h"
@@ -107,6 +109,16 @@ GUI::GUI(const QString &lang)
 	setWindowTitle(APP_NAME);
 	setUnifiedTitleAndToolBarOnMac(true);
 	setAcceptDrops(true);
+
+	// Live Stats dock - per-point telemetry at the current slider instant.
+	_liveStats = new LiveStatsWidget();
+	QDockWidget *statsDock = new QDockWidget(tr("Live Stats"), this);
+	statsDock->setObjectName(QString("LiveStatsDock"));
+	statsDock->setWidget(_liveStats);
+	statsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	addDockWidget(Qt::RightDockWidgetArea, statsDock);
+	connect(_mapView, &MapView::markerTelemetry, _liveStats,
+	  &LiveStatsWidget::updateTelemetry);
 
 	_trackCount = 0;
 	_routeCount = 0;

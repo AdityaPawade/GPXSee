@@ -5,6 +5,7 @@
 #include <QRectF>
 #include "common/coordinates.h"
 #include "common/rectc.h"
+#include "telemetry.h"
 #include "style.h"
 
 class PathPoint
@@ -14,13 +15,18 @@ public:
 	  _coordinates(Coordinates()), _distance(NAN) {}
 	PathPoint(const Coordinates &coordinates, qreal distance)
 	  : _coordinates(coordinates), _distance(distance) {}
+	PathPoint(const Coordinates &coordinates, qreal distance,
+	  const Telemetry &telemetry)
+	  : _coordinates(coordinates), _distance(distance), _telemetry(telemetry) {}
 
 	const Coordinates &coordinates() const {return _coordinates;}
 	qreal distance() const {return _distance;}
+	const Telemetry &telemetry() const {return _telemetry;}
 
 private:
 	Coordinates _coordinates;
 	qreal _distance;
+	Telemetry _telemetry;
 };
 
 Q_DECLARE_TYPEINFO(PathPoint, Q_PRIMITIVE_TYPE);

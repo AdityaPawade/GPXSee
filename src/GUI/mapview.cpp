@@ -17,6 +17,7 @@
 #include "areaitem.h"
 #include "scaleitem.h"
 #include "coordinatesitem.h"
+#include "radaroverlayitem.h"
 #include "mapitem.h"
 #include "keys.h"
 #include "mapaction.h"
@@ -59,6 +60,12 @@ MapView::MapView(Map *map, POI *poi, QWidget *parent)
 	_cursorCoordinates->setZValue(2.0);
 	_cursorCoordinates->setVisible(false);
 	_scene->addItem(_cursorCoordinates);
+
+	// radar FOV + target overlay, driven by the cursor telemetry.
+	_radarOverlay = new RadarOverlayItem();
+	_radarOverlay->setMap(_map);
+	_scene->addItem(_radarOverlay);
+	connect(this, &MapView::markerTelemetry, this, &MapView::updateRadarOverlay);
 
 	_deviceRatio = devicePixelRatioF();
 	_outputProjection = PCS::pcs(3857);
@@ -179,6 +186,7 @@ PathItem *MapView::addTrack(const Track &track)
 	}
 
 	TrackItem *ti = new TrackItem(track, _map);
+	connect(ti, &PathItem::markerTelemetry, this, &MapView::markerTelemetry);
 	_tracks.append(ti);
 	_tr |= ti->path().boundingRect();
 	ti->setColor(_palette.nextColor());
@@ -1399,10 +1407,24 @@ void MapView::setMarkerColor(const QColor &color)
 
 void MapView::setMarkerPosition(qreal pos)
 {
+	// clear the radar overlay first; tracks with telemetry re-set it
+	// synchronously via the markerTelemetry signal during the loop below.
+	if (_radarOverlay)
+		_radarOverlay->clear();
 	for (int i = 0; i < _tracks.size(); i++)
 		_tracks.at(i)->setMarkerPosition(pos);
 	for (int i = 0; i < _routes.size(); i++)
 		_routes.at(i)->setMarkerPosition(pos);
+}
+
+void MapView::updateRadarOverlay(const QString &name, const Coordinates &pos,
+  const Telemetry &t)
+{
+	Q_UNUSED(name);
+	if (_radarOverlay) {
+		_radarOverlay->setMap(_map);
+		_radarOverlay->setData(pos, t);
+	}
 }
 
 void MapView::reloadMap()

@@ -8,6 +8,7 @@
 #include <QFlags>
 #include "common/rectc.h"
 #include "data/waypoint.h"
+#include "data/telemetry.h"
 #include "map/projection.h"
 #include "searchpointer.h"
 #include "units.h"
@@ -32,6 +33,7 @@ class RouteItem;
 class WaypointItem;
 class ScaleItem;
 class CoordinatesItem;
+class RadarOverlayItem;
 class PathItem;
 class GraphItem;
 class PlaneItem;
@@ -135,10 +137,17 @@ public slots:
 	void useStyles(bool use);
 	void drawHillShading(bool draw);
 
+signals:
+	// relays per-track telemetry at the current marker to the GUI dock/overlays.
+	void markerTelemetry(const QString &name, const Coordinates &pos,
+	  const Telemetry &telemetry);
+
 private slots:
 	void updatePOI();
 	void reloadMap();
 	void updatePosition(const QGeoPositionInfo &pos);
+	void updateRadarOverlay(const QString &name, const Coordinates &pos,
+	  const Telemetry &telemetry);
 
 private:
 	typedef QHash<SearchPointer<Waypoint>, WaypointItem*> POIHash;
@@ -187,6 +196,7 @@ private:
 	CrosshairItem *_crosshair;
 	MotionInfoItem *_motionInfo;
 	LegendItem *_legend;
+	RadarOverlayItem *_radarOverlay;
 	QList<TrackItem*> _tracks;
 	QList<RouteItem*> _routes;
 	QList<WaypointItem*> _waypoints;

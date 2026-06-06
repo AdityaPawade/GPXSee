@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "vcpkg-msvc",
+      "displayName": "vcpkg + MSVC x64 (Qt6)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build-cmake",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "C:/Users/adity/Projects/cppenv/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_MODE": "OFF",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/deploy"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vcpkg-msvc-release",
+      "configurePreset": "vcpkg-msvc",
+      "configuration": "Release"
+    }
+  ]
+}

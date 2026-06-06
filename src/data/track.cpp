@@ -628,7 +628,7 @@ Path Track::path() const
 		for (int j = 0; j < sd.size(); j++)
 			if (!seg.outliers.contains(j) && !discardStopPoint(seg, j))
 				ps.append(PathPoint(sd.at(j).coordinates(),
-				  seg.distance.at(j)));
+				  seg.distance.at(j), sd.at(j).telemetry()));
 	}
 
 	ret.setStyle(_data.style());

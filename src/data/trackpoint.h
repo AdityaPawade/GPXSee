@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <cmath>
 #include "common/coordinates.h"
+#include "telemetry.h"
 
 class Trackpoint
 {
@@ -38,6 +39,9 @@ public:
 	void setPower(qreal power) {_power = power;}
 	void setRatio(qreal ratio) {_ratio = ratio;}
 
+	const Telemetry &telemetry() const {return _telemetry;}
+	Telemetry &rtelemetry() {return _telemetry;}
+
 	bool hasTimestamp() const {return !_timestamp.isNull();}
 	bool hasElevation() const {return !std::isnan(_elevation);}
 	bool hasSpeed() const {return !std::isnan(_speed);}
@@ -57,6 +61,7 @@ private:
 	qreal _cadence;
 	qreal _power;
 	qreal _ratio;
+	Telemetry _telemetry;
 };
 
 Q_DECLARE_TYPEINFO(Trackpoint, Q_MOVABLE_TYPE);

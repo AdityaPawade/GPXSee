@@ -62,7 +62,7 @@ macx {
 win32 {
     RESOURCES += theme-color.qrc
 
-    QMAKE_CXXFLAGS += /MP
+    win32-msvc: QMAKE_CXXFLAGS += /MP
     QMAKE_TARGET_DESCRIPTION = GPXSee
     QMAKE_TARGET_COPYRIGHT = Copyright (c) 2015-2026 Martin Tuma
     # If the icons order is not preserved, the file association breaks!

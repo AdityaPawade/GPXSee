@@ -152,6 +152,43 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			trackpoint.setPower(number());
 		else if (_reader.name() == QLatin1String("TrackPointExtension"))
 			tpExtension(trackpoint);
+		// --- Custom per-point telemetry extensions ---
+		else if (_reader.name() == QLatin1String("roll"))
+			trackpoint.rtelemetry().roll = number();
+		else if (_reader.name() == QLatin1String("pitch"))
+			trackpoint.rtelemetry().pitch = number();
+		else if (_reader.name() == QLatin1String("yaw"))
+			trackpoint.rtelemetry().yaw = number();
+		else if (_reader.name() == QLatin1String("airspeed"))
+			trackpoint.rtelemetry().airspeed = number();
+		else if (_reader.name() == QLatin1String("vspeed"))
+			trackpoint.rtelemetry().vspeed = number();
+		else if (_reader.name() == QLatin1String("roll_rate"))
+			trackpoint.rtelemetry().rollRate = number();
+		else if (_reader.name() == QLatin1String("yaw_rate"))
+			trackpoint.rtelemetry().yawRate = number();
+		else if (_reader.name() == QLatin1String("fuel_pct"))
+			trackpoint.rtelemetry().fuelPct = number();
+		else if (_reader.name() == QLatin1String("nav_bearing"))
+			trackpoint.rtelemetry().navBearing = number();
+		else if (_reader.name() == QLatin1String("nav_range"))
+			trackpoint.rtelemetry().navRange = number();
+		else if (_reader.name() == QLatin1String("radar_mode"))
+			trackpoint.rtelemetry().radarMode = number();
+		else if (_reader.name() == QLatin1String("radar_scan_width"))
+			trackpoint.rtelemetry().radarScan = number();
+		else if (_reader.name() == QLatin1String("contact_bearing"))
+			trackpoint.rtelemetry().contactBearing = number();
+		else if (_reader.name() == QLatin1String("contact_range"))
+			trackpoint.rtelemetry().contactRange = number();
+		else if (_reader.name() == QLatin1String("weapon"))
+			trackpoint.rtelemetry().weapon = number();
+		else if (_reader.name() == QLatin1String("gear"))
+			trackpoint.rtelemetry().gear = (int)number();
+		else if (_reader.name() == QLatin1String("wow"))
+			trackpoint.rtelemetry().wow = (int)number();
+		else if (_reader.name() == QLatin1String("auto_slats"))
+			trackpoint.rtelemetry().autoSlats = (int)number();
 		else
 			_reader.skipCurrentElement();
 	}

@@ -67,6 +67,10 @@ public slots:
 
 signals:
 	void selected(bool);
+	// emitted on marker move with the telemetry + aircraft position at the
+	// current cursor (for the Live Stats dock + radar/target map overlays).
+	void markerTelemetry(const QString &name, const Coordinates &pos,
+	  const Telemetry &telemetry);
 
 protected:
 	void hoverEnterEvent(QGraphicsSceneHoverEvent *event);
@@ -85,6 +89,7 @@ protected:
 
 private:
 	const PathSegment *segment(qreal x) const;
+	const PathPoint *pointAtDistance(qreal x) const;
 	QPointF position(qreal distance) const;
 	void updatePainterPath();
 	void updateShape();

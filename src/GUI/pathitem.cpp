@@ -335,6 +335,30 @@ QPointF PathItem::position(qreal x) const
 	}
 }
 
+const PathPoint *PathItem::pointAtDistance(qreal x) const
+{
+	const PathSegment *seg = segment(x);
+	if (!seg || seg->isEmpty())
+		return 0;
+
+	int low = 0, high = seg->count() - 1, mid = 0;
+	while (low <= high) {
+		mid = low + ((high - low) / 2);
+		qreal val = seg->at(mid).distance();
+		if (val > x)
+			high = mid - 1;
+		else if (val < x)
+			low = mid + 1;
+		else
+			return &seg->at(mid);
+	}
+	int best = mid;
+	if (mid > 0 && qAbs(seg->at(mid - 1).distance() - x)
+	  < qAbs(seg->at(mid).distance() - x))
+		best = mid - 1;
+	return &seg->at(best);
+}
+
 void PathItem::setMarkerPosition(qreal pos)
 {
 	qreal distance = _graph
@@ -348,6 +372,10 @@ void PathItem::setMarkerPosition(qreal pos)
 		_marker->setVisible(_showMarker);
 		_marker->setPos(pp);
 		setMarkerInfo(pos);
+
+		const PathPoint *mp = pointAtDistance(distance);
+		if (mp && mp->telemetry().isValid())
+			emit markerTelemetry(_name, mp->coordinates(), mp->telemetry());
 
 		if (_video) {
 			qreal time = _graph

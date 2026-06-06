@@ -29,6 +29,7 @@ class QPermission;
 class FileBrowser;
 class GraphTab;
 class MapView;
+class LiveStatsWidget;
 class Map;
 class POI;
 class QScreen;
@@ -342,6 +343,7 @@ private:
 
 	QSplitter *_splitter;
 	MapView *_mapView;
+	LiveStatsWidget *_liveStats;
 	QTabWidget *_graphTabWidget;
 	QList<GraphTab*> _tabs;
 	GraphTab *_lastTab;
