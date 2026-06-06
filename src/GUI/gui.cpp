@@ -119,6 +119,11 @@ GUI::GUI(const QString &lang)
 	addDockWidget(Qt::RightDockWidgetArea, statsDock);
 	connect(_mapView, &MapView::markerTelemetry, _liveStats,
 	  &LiveStatsWidget::updateTelemetry);
+	connect(_liveStats, &LiveStatsWidget::flightChanged, _mapView,
+	  &MapView::setActiveTrack);
+	connect(_mapView, &MapView::tracksChanged, this, [this]() {
+		_liveStats->setFlights(_mapView->trackNames());
+	});
 
 	_trackCount = 0;
 	_routeCount = 0;

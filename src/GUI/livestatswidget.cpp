@@ -2,6 +2,7 @@
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QLabel>
+#include <QComboBox>
 #include <cmath>
 #include "livestatswidget.h"
 #include "vizconfig.h"
@@ -18,6 +19,11 @@ static const char *ROW_LABELS[] = {
 
 LiveStatsWidget::LiveStatsWidget(QWidget *parent) : QWidget(parent)
 {
+	_flightCombo = new QComboBox(this);
+	_flightCombo->setVisible(false);
+	connect(_flightCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+	  this, &LiveStatsWidget::flightChanged);
+
 	_table = new QTableWidget(RowCount, 2, this);
 	_table->setHorizontalHeaderLabels(QStringList() << "Parameter" << "Value");
 	_table->verticalHeader()->setVisible(false);
@@ -39,6 +45,7 @@ LiveStatsWidget::LiveStatsWidget(QWidget *parent) : QWidget(parent)
 
 	QVBoxLayout *l = new QVBoxLayout();
 	l->setContentsMargins(2, 2, 2, 2);
+	l->addWidget(_flightCombo);
 	l->addWidget(_table);
 	setLayout(l);
 
@@ -114,4 +121,20 @@ void LiveStatsWidget::clear()
 {
 	for (int i = 0; i < RowCount; i++)
 		set(i, "-");
+}
+
+void LiveStatsWidget::setFlights(const QStringList &names)
+{
+	int cur = _flightCombo->currentIndex();
+	_flightCombo->blockSignals(true);
+	_flightCombo->clear();
+	for (int i = 0; i < names.size(); i++) {
+		QString n(names.at(i).isEmpty() ? QString("Track %1").arg(i + 1)
+		  : names.at(i));
+		_flightCombo->addItem(QString("%1: %2").arg(i + 1).arg(n));
+	}
+	if (cur >= 0 && cur < names.size())
+		_flightCombo->setCurrentIndex(cur);
+	_flightCombo->blockSignals(false);
+	_flightCombo->setVisible(names.size() > 1);
 }

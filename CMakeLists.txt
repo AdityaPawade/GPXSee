@@ -82,3 +82,14 @@ add_custom_command(TARGET GPXSee POST_BUILD
 
 install(TARGETS GPXSee RUNTIME DESTINATION ".")
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/viz.cfg" DESTINATION ".")
+
+# Ship a default online basemap so a fresh install has a map out of the box
+# (used when no user maps dir exists; Qt scans the application directory too).
+add_custom_command(TARGET GPXSee POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:GPXSee>/maps"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/maps/OpenStreetMap.xml"
+            "$<TARGET_FILE_DIR:GPXSee>/maps/OpenStreetMap.xml"
+    COMMENT "Deploying default online map next to GPXSee.exe"
+)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/maps" DESTINATION ".")

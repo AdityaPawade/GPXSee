@@ -137,6 +137,8 @@ MapView::MapView(Map *map, POI *poi, QWidget *parent)
 	_digitalZoom = 0;
 	_pinchZoom = 0;
 	_wheelDelta = 0;
+	_activeTrack = 0;
+	_markerPos = 0;
 
 	_res = _map->resolution(_map->bounds());
 	_scene->setSceneRect(_map->bounds());
@@ -186,8 +188,9 @@ PathItem *MapView::addTrack(const Track &track)
 	}
 
 	TrackItem *ti = new TrackItem(track, _map);
-	connect(ti, &PathItem::markerTelemetry, this, &MapView::markerTelemetry);
+	connect(ti, &PathItem::markerTelemetry, this, &MapView::onMarkerTelemetry);
 	_tracks.append(ti);
+	emit tracksChanged();
 	_tr |= ti->path().boundingRect();
 	ti->setColor(_palette.nextColor());
 	ti->setWidth(_trackWidth);
@@ -431,6 +434,8 @@ void MapView::rescale()
 	_crosshair->setMap(_map);
 
 	updatePOIVisibility();
+
+	refreshRadarOverlay();
 }
 
 void MapView::setPalette(const Palette &palette)
@@ -851,6 +856,8 @@ void MapView::clear()
 	_routes.clear();
 	_areas.clear();
 	_waypoints.clear();
+	_activeTrack = 0;
+	emit tracksChanged();
 
 	_scene->removeItem(_mapScale);
 	_scene->removeItem(_cursorCoordinates);
@@ -1407,6 +1414,7 @@ void MapView::setMarkerColor(const QColor &color)
 
 void MapView::setMarkerPosition(qreal pos)
 {
+	_markerPos = pos;
 	// clear the radar overlay first; tracks with telemetry re-set it
 	// synchronously via the markerTelemetry signal during the loop below.
 	if (_radarOverlay)
@@ -1421,10 +1429,50 @@ void MapView::updateRadarOverlay(const QString &name, const Coordinates &pos,
   const Telemetry &t)
 {
 	Q_UNUSED(name);
+	_radarPos = pos;
+	_radarTelemetry = t;
 	if (_radarOverlay) {
 		_radarOverlay->setMap(_map);
 		_radarOverlay->setData(pos, t);
 	}
+}
+
+void MapView::refreshRadarOverlay()
+{
+	// Re-project the radar/target overlay after a map zoom or rescale: the
+	// aircraft lat/lon is zoom-invariant, only the pixel mapping changes, so
+	// the wedge/target must be recomputed at the new scale.
+	if (_radarOverlay && _radarOverlay->isVisible()) {
+		_radarOverlay->setMap(_map);
+		_radarOverlay->setData(_radarPos, _radarTelemetry);
+	}
+}
+
+void MapView::onMarkerTelemetry(const QString &name, const Coordinates &pos,
+  const Telemetry &t)
+{
+	// Only the active flight drives the Live Stats dock + radar/target overlay;
+	// with multiple tracks loaded, the others' marker telemetry is ignored.
+	int idx = _tracks.indexOf(static_cast<TrackItem*>(sender()));
+	if (idx < 0 || _tracks.size() <= 1 || idx == _activeTrack)
+		emit markerTelemetry(name, pos, t);
+}
+
+void MapView::setActiveTrack(int index)
+{
+	if (index < 0 || index >= _tracks.size())
+		return;
+	_activeTrack = index;
+	// Re-apply the current marker so the dock + overlay switch immediately.
+	setMarkerPosition(_markerPos);
+}
+
+QStringList MapView::trackNames() const
+{
+	QStringList names;
+	for (int i = 0; i < _tracks.size(); i++)
+		names.append(_tracks.at(i)->name());
+	return names;
 }
 
 void MapView::reloadMap()

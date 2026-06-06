@@ -6,6 +6,7 @@
 #include "data/telemetry.h"
 
 class QTableWidget;
+class QComboBox;
 
 /* A live readout of the per-point telemetry at the current graph-slider
    instant (heading/attitude/airspeed, radar mode & scan, nav cue, fuel, gear,
@@ -22,6 +23,10 @@ public slots:
 	void updateTelemetry(const QString &name, const Coordinates &pos,
 	  const Telemetry &t);
 	void clear();
+	void setFlights(const QStringList &names);
+
+signals:
+	void flightChanged(int index);
 
 private:
 	enum Row {
@@ -32,6 +37,7 @@ private:
 	};
 	void set(int row, const QString &value, const QColor &color = QColor());
 	QTableWidget *_table;
+	QComboBox *_flightCombo;
 };
 
 #endif // LIVESTATSWIDGET_H

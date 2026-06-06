@@ -105,6 +105,8 @@ public:
 
 	RectC boundingRect() const;
 	const Projection &inputProjection() const {return _inputProjection;}
+	QStringList trackNames() const;
+	int activeTrack() const {return _activeTrack;}
 
 #ifdef Q_OS_ANDROID
 	NavigationWidget *navigation() {return _nav;}
@@ -131,6 +133,7 @@ public slots:
 	void showWaypoints(bool show);
 	void showRouteWaypoints(bool show);
 	void setMarkerPosition(qreal pos);
+	void setActiveTrack(int index);
 	void followPosition(bool follow);
 	void showMotionInfo(bool show);
 	void showLegend(bool show);
@@ -141,6 +144,7 @@ signals:
 	// relays per-track telemetry at the current marker to the GUI dock/overlays.
 	void markerTelemetry(const QString &name, const Coordinates &pos,
 	  const Telemetry &telemetry);
+	void tracksChanged();
 
 private slots:
 	void updatePOI();
@@ -148,8 +152,11 @@ private slots:
 	void updatePosition(const QGeoPositionInfo &pos);
 	void updateRadarOverlay(const QString &name, const Coordinates &pos,
 	  const Telemetry &telemetry);
+	void onMarkerTelemetry(const QString &name, const Coordinates &pos,
+	  const Telemetry &telemetry);
 
 private:
+	void refreshRadarOverlay();
 	typedef QHash<SearchPointer<Waypoint>, WaypointItem*> POIHash;
 
 	PathItem *addTrack(const Track &track);
@@ -197,6 +204,10 @@ private:
 	MotionInfoItem *_motionInfo;
 	LegendItem *_legend;
 	RadarOverlayItem *_radarOverlay;
+	Coordinates _radarPos;          // cached marker position (zoom-invariant)
+	Telemetry _radarTelemetry;      // cached marker telemetry, for re-projection
+	int _activeTrack;               // which track drives the dock + overlay
+	qreal _markerPos;               // last graph-slider position (for re-trigger)
 	QList<TrackItem*> _tracks;
 	QList<RouteItem*> _routes;
 	QList<WaypointItem*> _waypoints;

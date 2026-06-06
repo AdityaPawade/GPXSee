@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map type="OSM">
+    <name>OpenStreetMap</name>
+    <url>https://tile.openstreetmap.org/$z/$x/$y.png</url>
+    <zoom min="0" max="19"/>
+</map>
