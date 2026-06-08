@@ -2,15 +2,11 @@
 #define VIZCONFIG_H
 
 // ---------------------------------------------------------------------------
-// VizConfig — runtime configuration for the telemetry-overlay layer.
+// VizConfig - runtime configuration for the telemetry-overlay layer.
 //
 // GPX tracks may carry custom per-point telemetry in <trkpt><extensions>
-// (attitude, rates, fuel, radar mode/scan, contacts, discrete states). How
-// those values are INTERPRETED for display (radar-mode value -> name, the FOV
-// wedge length, the scan-sector default, the "engaged" threshold, the
-// discrete-state labels and the overlay colours) is read from an external INI
-// file `viz.cfg` so that NOTHING is hard-coded in C++. Built-in defaults apply
-// when no file is present; the file only needs to list the keys it overrides.
+// (attitude, rates, fuel, sensor scan state, tracks, contacts, discrete
+// states). Presentation labels and overlay styles are read from `viz.cfg`.
 //
 // Search order (later overrides earlier):
 //   1) built-in defaults (loadDefaults())
@@ -19,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 #include <QString>
+#include <QList>
 #include <QColor>
 #include <QMap>
 
@@ -33,34 +30,60 @@ public:
 	static const VizConfig &instance();
 
 	// [radar]
-	double fovRangeMeters;       // visual radar wedge length (m)
+	double fovRangeMeters;       // visual sensor wedge length (m)
 	double scanDefaultDeg;       // sector width used when scan is unknown (deg)
-	int    radarOnMinCode;       // radar considered "on" when mode > this
+	int    radarOnMinCode;       // sensor considered active when mode > this
 	QColor radarDefaultColor;    // wedge colour for unknown modes
-	QColor radarActiveColor;     // Live-Stats text colour when radar is on
+	QColor radarActiveColor;     // status text colour when sensor is active
 
 	// [radar_modes]  value -> { name, wedge colour }
 	QMap<int, RadarModeDef> radarModes;
+	QMap<int, QString> radarStates;   // continuous radar state code -> label (0/1/2)
 
-	// [weapon]
-	double  weaponEngagedThreshold;
-	QColor  weaponEngagedColor;
-	QString weaponEngagedLabel;
-	QString weaponIdleLabel;
+	// [event]
+	double  eventActiveThreshold;
+	QColor  eventActiveColor;
+	QString eventActiveLabel;
+	QString eventIdleLabel;
 
-	// [contact]
-	QColor targetColor;
-	double targetMarkerRadiusPx;
+	// [overlay]
+	bool showScanWedge, showLookRay, showTrack, showContact;
+	QColor lookRayColor;
+	double lookRayWidthPx;
+	QColor trackColor, contactColor;
+	double trackMarkerRadiusPx, contactMarkerRadiusPx;
+	double targetLineWidthPx;
 
 	// [labels] discrete-state interpretations
 	QString gearDownLabel, gearUpLabel;
 	QString wowGroundLabel, wowAirLabel;
 	QString slatsOutLabel, slatsInLabel;
+	QString missingValueLabel;
+	QMap<QString, QString> panelTitles;
+	QMap<QString, QString> fieldLabels;
+
+	// [playback]
+	int referenceYear;
+	QList<int> playbackSpeeds;
+	QString playbackPlayLabel, playbackPauseLabel, playbackSpeedLabel;
+	QString playbackSpeedSuffix;
+	QString playbackElapsedLabel, playbackRemainingLabel;
+	QString playbackClockFormat, playbackClockStyle;
+	int playbackTimerIntervalMs;
+
+	// [sync]
+	QString syncButtonLabel, syncDialogTitle, syncOffsetLabel;
+	QString syncDirectionLabel, syncResetLabel, syncResetAllLabel;
+	double syncRangeMinutes, syncStepSeconds;
 
 	// helpers
 	QString radarModeName(double mode) const;   // value -> display name
 	QColor  radarModeColor(int code) const;     // value -> wedge colour
 	bool    radarOn(double mode) const;
+	QString radarStateName(double state) const; // 0/1/2 -> OFF/SEARCH/LOCK
+	QString lockScanLabel;   // shown for scan-width during a lock (no sector scan)
+	QString panelTitle(const QString &key) const;
+	QString fieldLabel(const QString &key) const;
 	QString sourcePath() const { return _sourcePath; }
 
 private:

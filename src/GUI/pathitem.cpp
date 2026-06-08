@@ -273,6 +273,23 @@ const PathSegment *PathItem::segment(qreal x) const
 	return 0;
 }
 
+const PathSegment *PathItem::timeSegment(const QDateTime &time) const
+{
+	if (!time.isValid())
+		return 0;
+
+	for (int i = 0; i < _path.size(); i++) {
+		const PathSegment &seg = _path.at(i);
+		if (seg.isEmpty() || !seg.first().hasTimestamp()
+		  || !seg.last().hasTimestamp())
+			continue;
+		if (time >= seg.first().timestamp() && time <= seg.last().timestamp())
+			return &seg;
+	}
+
+	return 0;
+}
+
 QPointF PathItem::position(qreal x) const
 {
 	const PathSegment *seg = segment(x);
@@ -359,6 +376,26 @@ const PathPoint *PathItem::pointAtDistance(qreal x) const
 	return &seg->at(best);
 }
 
+QPair<QDateTime, QDateTime> PathItem::timeRange() const
+{
+	QDateTime start, end;
+
+	for (int i = 0; i < _path.size(); i++) {
+		const PathSegment &seg = _path.at(i);
+		for (int j = 0; j < seg.size(); j++) {
+			const PathPoint &p = seg.at(j);
+			if (!p.hasTimestamp())
+				continue;
+			if (!start.isValid() || p.timestamp() < start)
+				start = p.timestamp();
+			if (!end.isValid() || p.timestamp() > end)
+				end = p.timestamp();
+		}
+	}
+
+	return qMakePair(start, end);
+}
+
 void PathItem::setMarkerPosition(qreal pos)
 {
 	qreal distance = _graph
@@ -385,6 +422,64 @@ void PathItem::setMarkerPosition(qreal pos)
 			if (!std::isnan(time))
 				_video->seek(time, _graph->duration());
 		}
+	} else
+		_marker->setVisible(false);
+}
+
+void PathItem::setMarkerTime(const QDateTime &time)
+{
+	const PathSegment *seg = timeSegment(time);
+	if (!seg || seg->size() < 2) {
+		_marker->setVisible(false);
+		return;
+	}
+
+	int low = 0, high = seg->count() - 1, mid = 0;
+	while (low <= high) {
+		mid = low + ((high - low) / 2);
+		const QDateTime &val = seg->at(mid).timestamp();
+		if (val > time)
+			high = mid - 1;
+		else if (val < time)
+			low = mid + 1;
+		else {
+			_markerDistance = seg->at(mid).distance();
+			QPointF pp(position(_markerDistance));
+			if (isValid(pp)) {
+				_marker->setVisible(_showMarker);
+				_marker->setPos(pp);
+				setMarkerInfo(_markerDistance);
+				if (seg->at(mid).telemetry().isValid())
+					emit markerTelemetry(_name, seg->at(mid).coordinates(),
+					  seg->at(mid).telemetry());
+			} else
+				_marker->setVisible(false);
+			return;
+		}
+	}
+
+	int i1 = qMax(0, high);
+	int i2 = qMin(seg->count() - 1, low);
+	if (i1 == i2 || !seg->at(i1).hasTimestamp()
+	  || !seg->at(i2).hasTimestamp()) {
+		_marker->setVisible(false);
+		return;
+	}
+
+	qint64 span = seg->at(i1).timestamp().msecsTo(seg->at(i2).timestamp());
+	qreal f = span > 0 ? seg->at(i1).timestamp().msecsTo(time) / (qreal)span : 0;
+	_markerDistance = seg->at(i1).distance()
+	  + (seg->at(i2).distance() - seg->at(i1).distance()) * f;
+	QPointF pp(position(_markerDistance));
+
+	if (isValid(pp)) {
+		_marker->setVisible(_showMarker);
+		_marker->setPos(pp);
+		setMarkerInfo(_markerDistance);
+
+		const PathPoint &tp = (f < 0.5) ? seg->at(i1) : seg->at(i2);
+		if (tp.telemetry().isValid())
+			emit markerTelemetry(_name, tp.coordinates(), tp.telemetry());
 	} else
 		_marker->setVisible(false);
 }

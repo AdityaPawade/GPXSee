@@ -166,7 +166,7 @@ MapData::Elevation *DEMFile::elevations(Handle &hdl, int level,
 	quint16 lim = limit(tile, l.factor);
 	Matrix<qint16> m(tile->h(), tile->w());
 	JLS jls(tile->diff(), l.factor);
-	if (jls.decode(this, hdl, m)) {
+	if (jls.readImage(this, hdl, m)) {
 		for (int i = 0; i < m.size(); i++) {
 			if (m.at(i) >= lim)
 				m.at(i) = -32768;

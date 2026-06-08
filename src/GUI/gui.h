@@ -5,7 +5,9 @@
 #include <QString>
 #include <QList>
 #include <QDate>
+#include <QDateTime>
 #include <QPrinter>
+#include <QElapsedTimer>
 #include "common/treenode.h"
 #include "common/rectc.h"
 #include "data/graph.h"
@@ -24,12 +26,18 @@ class QAction;
 class QLabel;
 class QSplitter;
 class QPrinter;
+class QPushButton;
+class QSlider;
+class QComboBox;
+class QTimer;
+class QDockWidget;
 class QGeoPositionInfoSource;
 class QPermission;
 class FileBrowser;
 class GraphTab;
 class MapView;
 class LiveStatsWidget;
+class SensorTargetsWidget;
 class Map;
 class POI;
 class QScreen;
@@ -137,6 +145,12 @@ private slots:
 	void mapInitialized();
 
 	void demLoaded();
+	void playbackRangeChanged(const QDateTime &start, const QDateTime &end);
+	void togglePlayback(bool checked);
+	void playbackTick();
+	void scrubPlayback(int value);
+	void speedChanged(int index);
+	void showPlaybackSync();
 
 #ifdef Q_OS_ANDROID
 	void menu(const QPoint &pos);
@@ -169,6 +183,7 @@ private:
 	void createMapView();
 	void createGraphTabs();
 	void createBrowser();
+	void createPlaybackControls();
 
 	void openDir(const QString &path, int &showError);
 	bool openPOIFile(const QString &fileName);
@@ -180,6 +195,9 @@ private:
 	void loadMapDirNode(const TreeNode<Map*> &node, QList<MapAction*> &actions,
 	  QMenu *menu, const QList<QAction*> &existingActions, int &showError);
 	void updateStatusBarInfo();
+	void updatePlaybackControls();
+	void setPlaybackTime(const QDateTime &time);
+	QString playbackSpan(qint64 ms) const;
 	void updateWindowTitle();
 	bool updateGraphTabs();
 	void updateDataDEMDownloadAction();
@@ -344,7 +362,21 @@ private:
 	QSplitter *_splitter;
 	MapView *_mapView;
 	LiveStatsWidget *_liveStats;
+	SensorTargetsWidget *_sensorStats;
+	SensorTargetsWidget *_targetStats;
 	QTabWidget *_graphTabWidget;
+	QDockWidget *_playbackDock;
+	QPushButton *_playbackButton;
+	QPushButton *_playbackSyncButton;
+	QSlider *_playbackSlider;
+	QComboBox *_playbackSpeed;
+	QLabel *_playbackElapsedLabel;
+	QLabel *_playbackRemainingLabel;
+	QTimer *_playbackTimer;
+	QElapsedTimer _playbackElapsed;
+	QDateTime _playbackStart, _playbackEnd, _playbackTime;
+	qint64 _playbackDurationMs;
+	bool _playbackScrubbing;
 	QList<GraphTab*> _tabs;
 	GraphTab *_lastTab;
 

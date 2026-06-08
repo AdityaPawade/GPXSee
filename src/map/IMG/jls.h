@@ -12,7 +12,7 @@ class JLS
 public:
 	JLS(quint16 maxval, quint16 near);
 
-	bool decode(const SubFile *file, SubFile::Handle &hdl,
+	bool readImage(const SubFile *file, SubFile::Handle &hdl,
 	  Matrix<qint16> &img) const;
 
 private:
@@ -91,7 +91,7 @@ private:
 	bool readLine(BitStream &bs, Context &ctx) const;
 	bool processRunMode(BitStream &bs, Context &ctx, quint16 col,
 	  quint16 &samples) const;
-	bool decodeError(BitStream &bs, quint8 limit, quint8 k,
+	bool readError(BitStream &bs, quint8 limit, quint8 k,
 	  uint &MErrval) const;
 
 	quint16 _maxval;

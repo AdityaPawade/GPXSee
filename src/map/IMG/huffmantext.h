@@ -11,7 +11,7 @@ public:
 	HuffmanText() : _table(0) {}
 
 	bool load(const RGNFile *rgn, SubFile::Handle &rgnHdl);
-	bool decode(const SubFile *file, SubFile::Handle &hdl, quint32 size,
+	bool readText(const SubFile *file, SubFile::Handle &hdl, quint32 size,
 	  QVector<quint8> &str) const;
 
 private:

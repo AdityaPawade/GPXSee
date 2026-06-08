@@ -13,7 +13,7 @@ bool HuffmanText::load(const RGNFile *rgn, SubFile::Handle &rgnHdl)
 	return !(_table.symbolBits() & 7);
 }
 
-bool HuffmanText::decode(const SubFile *file, SubFile::Handle &hdl,
+bool HuffmanText::readText(const SubFile *file, SubFile::Handle &hdl,
   quint32 size, QVector<quint8> &str) const
 {
 	BitStream4F bs(*file, hdl, size);

@@ -36,7 +36,7 @@ android {
      *
      * are defined in gradle.properties file. This file is
      * updated by QtCreator and androiddeployqt tools.
-     * Changing them manually might break the compilation!
+     * Changing them manually may break the compilation!
      *******************************************************/
 
     namespace = androidPackageName

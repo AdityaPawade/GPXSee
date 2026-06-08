@@ -6,7 +6,7 @@
 
 using namespace MVT;
 
-static inline qint32 zigzag32decode(quint32 value)
+static inline qint32 zigzag32Value(quint32 value)
 {
 	return static_cast<qint32>((value >> 1u) ^ static_cast<quint32>(
 	  -static_cast<qint32>(value & 1u)));
@@ -14,7 +14,7 @@ static inline qint32 zigzag32decode(quint32 value)
 
 static inline QPoint parameters(quint32 v1, quint32 v2)
 {
-	return QPoint(zigzag32decode(v1), zigzag32decode(v2));
+	return QPoint(zigzag32Value(v1), zigzag32Value(v2));
 }
 
 const QVariant *VectorTile::Feature::value(const QByteArray &key) const

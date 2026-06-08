@@ -152,7 +152,7 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			trackpoint.setPower(number());
 		else if (_reader.name() == QLatin1String("TrackPointExtension"))
 			tpExtension(trackpoint);
-		// --- Custom per-point telemetry extensions ---
+		// Optional per-point telemetry extensions.
 		else if (_reader.name() == QLatin1String("roll"))
 			trackpoint.rtelemetry().roll = number();
 		else if (_reader.name() == QLatin1String("pitch"))
@@ -161,14 +161,20 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			trackpoint.rtelemetry().yaw = number();
 		else if (_reader.name() == QLatin1String("airspeed"))
 			trackpoint.rtelemetry().airspeed = number();
+		else if (_reader.name() == QLatin1String("airspeed_kt"))
+			trackpoint.rtelemetry().airspeedKt = number();
 		else if (_reader.name() == QLatin1String("vspeed"))
 			trackpoint.rtelemetry().vspeed = number();
 		else if (_reader.name() == QLatin1String("roll_rate"))
 			trackpoint.rtelemetry().rollRate = number();
 		else if (_reader.name() == QLatin1String("yaw_rate"))
 			trackpoint.rtelemetry().yawRate = number();
+		else if (_reader.name() == QLatin1String("fuel_raw"))
+			trackpoint.rtelemetry().fuelRaw = number();
 		else if (_reader.name() == QLatin1String("fuel_pct"))
 			trackpoint.rtelemetry().fuelPct = number();
+		else if (_reader.name() == QLatin1String("fuel_kg"))
+			trackpoint.rtelemetry().fuelKg = number();
 		else if (_reader.name() == QLatin1String("nav_bearing"))
 			trackpoint.rtelemetry().navBearing = number();
 		else if (_reader.name() == QLatin1String("nav_range"))
@@ -177,16 +183,34 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			trackpoint.rtelemetry().radarMode = number();
 		else if (_reader.name() == QLatin1String("radar_scan_width"))
 			trackpoint.rtelemetry().radarScan = number();
+		else if (_reader.name() == QLatin1String("radar_scan_program"))
+			trackpoint.rtelemetry().radarScanProgram = number();
+		else if (_reader.name() == QLatin1String("look_az"))
+			trackpoint.rtelemetry().lookAzimuth = number();
+		else if (_reader.name() == QLatin1String("radar_state"))
+			trackpoint.rtelemetry().radarState = number();
+		else if (_reader.name() == QLatin1String("radar_az"))
+			trackpoint.rtelemetry().radarAz = number();
+		else if (_reader.name() == QLatin1String("track_bearing"))
+			trackpoint.rtelemetry().trackBearing = number();
+		else if (_reader.name() == QLatin1String("track_range"))
+			trackpoint.rtelemetry().trackRange = number();
 		else if (_reader.name() == QLatin1String("contact_bearing"))
 			trackpoint.rtelemetry().contactBearing = number();
 		else if (_reader.name() == QLatin1String("contact_range"))
 			trackpoint.rtelemetry().contactRange = number();
-		else if (_reader.name() == QLatin1String("weapon"))
-			trackpoint.rtelemetry().weapon = number();
+		else if (_reader.name() == QLatin1String("contact_alt"))
+			trackpoint.rtelemetry().contactAltitude = number();
+		else if (_reader.name() == QLatin1String("event"))
+			trackpoint.rtelemetry().event = number();
 		else if (_reader.name() == QLatin1String("gear"))
 			trackpoint.rtelemetry().gear = (int)number();
 		else if (_reader.name() == QLatin1String("wow"))
 			trackpoint.rtelemetry().wow = (int)number();
+		else if (_reader.name() == QLatin1String("wow_raw"))
+			// written as a hex string (e.g. "0x3F"); parse base-0 (auto-detects
+			// 0x, else decimal) and tolerate junk instead of failing the file.
+			trackpoint.rtelemetry().wowRaw = _reader.readElementText().toInt(nullptr, 0);
 		else if (_reader.name() == QLatin1String("auto_slats"))
 			trackpoint.rtelemetry().autoSlats = (int)number();
 		else

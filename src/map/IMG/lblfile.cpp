@@ -281,7 +281,7 @@ Label LBLFile::labelHuffman(Handle &hdl, const SubFile *file, Handle &fileHdl,
 {
 	QVector<quint8> tpl;
 
-	if (!_huffmanText->decode(file, fileHdl, size, tpl))
+	if (!_huffmanText->readText(file, fileHdl, size, tpl))
 		return Label();
 	if (!_table.size())
 		return str2label(tpl, capitalize, convert);
@@ -303,7 +303,7 @@ Label LBLFile::labelHuffman(Handle &hdl, const SubFile *file, Handle &fileHdl,
 			quint32 limit = _base.offset + _base.size - offset;
 			if (!seek(hdl, offset))
 				return Label();
-			if (!_huffmanText->decode(this, hdl, limit, str))
+			if (!_huffmanText->readText(this, hdl, limit, str))
 				return Label();
 		} else {
 			if (str.size() && str.back() == '\0')

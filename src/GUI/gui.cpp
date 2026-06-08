@@ -27,7 +27,16 @@
 #include <QStyle>
 #include <QTabBar>
 #include <QPushButton>
+#include <QSlider>
+#include <QComboBox>
+#include <QTimer>
+#include <QHBoxLayout>
+#include <QGridLayout>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QGeoPositionInfoSource>
+#include <limits>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 #include <QPermissions>
 #endif // QT 6.5
@@ -55,6 +64,8 @@
 #include <QDockWidget>
 #include "mapview.h"
 #include "livestatswidget.h"
+#include "sensortargetswidget.h"
+#include "vizconfig.h"
 #include "trackinfo.h"
 #include "filebrowser.h"
 #include "graphtab.h"
@@ -110,20 +121,42 @@ GUI::GUI(const QString &lang)
 	setUnifiedTitleAndToolBarOnMac(true);
 	setAcceptDrops(true);
 
-	// Live Stats dock - per-point telemetry at the current slider instant.
+	const VizConfig &viz = VizConfig::instance();
 	_liveStats = new LiveStatsWidget();
-	QDockWidget *statsDock = new QDockWidget(tr("Live Stats"), this);
+	QDockWidget *statsDock = new QDockWidget(viz.panelTitle("live_stats"), this);
 	statsDock->setObjectName(QString("LiveStatsDock"));
 	statsDock->setWidget(_liveStats);
 	statsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 	addDockWidget(Qt::RightDockWidgetArea, statsDock);
 	connect(_mapView, &MapView::markerTelemetry, _liveStats,
 	  &LiveStatsWidget::updateTelemetry);
+
+	_sensorStats = new SensorTargetsWidget(SensorTargetsWidget::SensorMode);
+	QDockWidget *sensorDock = new QDockWidget(viz.panelTitle("sensor"), this);
+	sensorDock->setObjectName(QString("SensorDock"));
+	sensorDock->setWidget(_sensorStats);
+	sensorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	addDockWidget(Qt::RightDockWidgetArea, sensorDock);
+	connect(_mapView, &MapView::markerTelemetry, _sensorStats,
+	  &SensorTargetsWidget::updateTelemetry);
+
+	_targetStats = new SensorTargetsWidget(SensorTargetsWidget::TargetsMode);
+	QDockWidget *targetsDock = new QDockWidget(viz.panelTitle("targets"), this);
+	targetsDock->setObjectName(QString("TargetsDock"));
+	targetsDock->setWidget(_targetStats);
+	targetsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	addDockWidget(Qt::RightDockWidgetArea, targetsDock);
+	connect(_mapView, &MapView::markerTelemetry, _targetStats,
+	  &SensorTargetsWidget::updateTelemetry);
+
 	connect(_liveStats, &LiveStatsWidget::flightChanged, _mapView,
 	  &MapView::setActiveTrack);
 	connect(_mapView, &MapView::tracksChanged, this, [this]() {
 		_liveStats->setFlights(_mapView->trackNames());
 	});
+	connect(_mapView, &MapView::playbackRangeChanged, this,
+	  &GUI::playbackRangeChanged);
+	createPlaybackControls();
 
 	_trackCount = 0;
 	_routeCount = 0;
@@ -134,6 +167,8 @@ GUI::GUI(const QString &lang)
 	_time = 0;
 	_movingTime = 0;
 	_lastTab = 0;
+	_playbackDurationMs = 0;
+	_playbackScrubbing = false;
 
 	readSettings(activeMap, disabledPOIs, recentFiles);
 
@@ -1033,6 +1068,264 @@ void GUI::createStatusBar()
 	statusBar()->setSizeGripEnabled(false);
 }
 
+void GUI::createPlaybackControls()
+{
+	const VizConfig &viz = VizConfig::instance();
+
+	_playbackDock = new QDockWidget(QString(), this);
+	_playbackDock->setObjectName(QString("PlaybackDock"));
+	_playbackDock->setTitleBarWidget(new QWidget(_playbackDock));
+	_playbackDock->setAllowedAreas(Qt::BottomDockWidgetArea);
+	_playbackDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+
+	QWidget *panel = new QWidget(_playbackDock);
+	QHBoxLayout *layout = new QHBoxLayout(panel);
+	layout->setContentsMargins(8, 4, 8, 4);
+	layout->setSpacing(8);
+
+	_playbackButton = new QPushButton(viz.playbackPlayLabel, panel);
+	_playbackButton->setCheckable(true);
+	_playbackButton->setEnabled(false);
+	layout->addWidget(_playbackButton);
+
+	_playbackElapsedLabel = new QLabel(panel);
+	_playbackElapsedLabel->setMinimumWidth(130);
+	layout->addWidget(_playbackElapsedLabel);
+
+	_playbackSlider = new QSlider(Qt::Horizontal, panel);
+	_playbackSlider->setEnabled(false);
+	layout->addWidget(_playbackSlider, 1);
+
+	_playbackRemainingLabel = new QLabel(panel);
+	_playbackRemainingLabel->setMinimumWidth(150);
+	layout->addWidget(_playbackRemainingLabel);
+
+	layout->addWidget(new QLabel(viz.playbackSpeedLabel, panel));
+	_playbackSpeed = new QComboBox(panel);
+	for (int i = 0; i < viz.playbackSpeeds.size(); i++) {
+		int speed = viz.playbackSpeeds.at(i);
+		_playbackSpeed->addItem(QString("%1%2").arg(speed)
+		  .arg(viz.playbackSpeedSuffix), speed);
+	}
+	_playbackSpeed->setEnabled(false);
+	layout->addWidget(_playbackSpeed);
+
+	_playbackSyncButton = new QPushButton(viz.syncButtonLabel, panel);
+	_playbackSyncButton->setEnabled(false);
+	layout->addWidget(_playbackSyncButton);
+
+	_playbackDock->setWidget(panel);
+	addDockWidget(Qt::BottomDockWidgetArea, _playbackDock);
+
+	_playbackTimer = new QTimer(this);
+	_playbackTimer->setInterval(viz.playbackTimerIntervalMs);
+	_playbackDurationMs = 0;
+	_playbackScrubbing = false;
+
+	_mapView->setPlaybackClockFormat(viz.playbackClockFormat);
+	_mapView->setPlaybackClockStyle(viz.playbackClockStyle);
+	_mapView->showPlaybackClock(false);
+
+	connect(_playbackButton, &QPushButton::toggled, this,
+	  &GUI::togglePlayback);
+	connect(_playbackTimer, &QTimer::timeout, this, &GUI::playbackTick);
+	connect(_playbackSlider, &QSlider::sliderMoved, this, &GUI::scrubPlayback);
+	connect(_playbackSlider, &QSlider::valueChanged, this, &GUI::scrubPlayback);
+	connect(_playbackSpeed, QOverload<int>::of(&QComboBox::currentIndexChanged),
+	  this, &GUI::speedChanged);
+	connect(_playbackSyncButton, &QPushButton::clicked, this,
+	  &GUI::showPlaybackSync);
+
+	updatePlaybackControls();
+}
+
+QString GUI::playbackSpan(qint64 ms) const
+{
+	qint64 total = qMax<qint64>(0, ms / 1000);
+	qint64 h = total / 3600;
+	qint64 m = (total % 3600) / 60;
+	qint64 s = total % 60;
+	return QString("%1:%2:%3").arg(h).arg(m, 2, 10, QLatin1Char('0'))
+	  .arg(s, 2, 10, QLatin1Char('0'));
+}
+
+void GUI::playbackRangeChanged(const QDateTime &start, const QDateTime &end)
+{
+	QDateTime current = _playbackTime.isValid() ? _playbackTime : start;
+	_playbackStart = start;
+	_playbackEnd = end;
+	_playbackTime = current;
+	if (_playbackTime < _playbackStart)
+		_playbackTime = _playbackStart;
+	if (_playbackTime > _playbackEnd)
+		_playbackTime = _playbackEnd;
+	_playbackDurationMs = start.isValid() && end.isValid()
+	  ? start.msecsTo(end) : 0;
+
+	_playbackSlider->setRange(0, qMin<qint64>(_playbackDurationMs,
+	  std::numeric_limits<int>::max()));
+	if (_playbackDurationMs > 0)
+		setPlaybackTime(_playbackTime);
+	else
+		updatePlaybackControls();
+}
+
+void GUI::setPlaybackTime(const QDateTime &time)
+{
+	if (!_playbackStart.isValid() || !_playbackEnd.isValid())
+		return;
+
+	_playbackTime = time;
+	if (_playbackTime < _playbackStart)
+		_playbackTime = _playbackStart;
+	if (_playbackTime > _playbackEnd)
+		_playbackTime = _playbackEnd;
+
+	_playbackScrubbing = true;
+	qint64 elapsed = _playbackStart.msecsTo(_playbackTime);
+	int sliderValue = _playbackDurationMs > 0
+	  ? (int)((elapsed * (qint64)_playbackSlider->maximum())
+	  / _playbackDurationMs) : 0;
+	_playbackSlider->setValue(sliderValue);
+	_playbackScrubbing = false;
+
+	_mapView->setPlaybackTime(_playbackTime);
+	updatePlaybackControls();
+}
+
+void GUI::updatePlaybackControls()
+{
+	const VizConfig &viz = VizConfig::instance();
+	bool enabled = _playbackDurationMs > 0;
+	qint64 elapsed = enabled ? _playbackStart.msecsTo(_playbackTime) : 0;
+	qint64 remaining = enabled ? _playbackTime.msecsTo(_playbackEnd) : 0;
+
+	_playbackButton->setEnabled(enabled);
+	_playbackSlider->setEnabled(enabled);
+	_playbackSpeed->setEnabled(enabled);
+	_playbackSyncButton->setEnabled(_mapView->trackCount() > 0);
+	_playbackElapsedLabel->setText(QString("%1 %2")
+	  .arg(viz.playbackElapsedLabel, playbackSpan(elapsed)));
+	_playbackRemainingLabel->setText(QString("%1 %2")
+	  .arg(viz.playbackRemainingLabel, playbackSpan(remaining)));
+	_playbackButton->setText(_playbackTimer->isActive()
+	  ? viz.playbackPauseLabel : viz.playbackPlayLabel);
+}
+
+void GUI::togglePlayback(bool checked)
+{
+	if (checked && _playbackDurationMs > 0) {
+		if (_playbackTime >= _playbackEnd)
+			setPlaybackTime(_playbackStart);
+		_playbackElapsed.restart();
+		_playbackTimer->start();
+	} else
+		_playbackTimer->stop();
+
+	updatePlaybackControls();
+}
+
+void GUI::playbackTick()
+{
+	if (!_playbackTimer->isActive() || _playbackDurationMs <= 0)
+		return;
+
+	qint64 realElapsed = _playbackElapsed.restart();
+	int speed = _playbackSpeed->currentData().toInt();
+	QDateTime next = _playbackTime.addMSecs(realElapsed * speed);
+
+	if (next >= _playbackEnd) {
+		setPlaybackTime(_playbackEnd);
+		_playbackTimer->stop();
+		_playbackButton->setChecked(false);
+		updatePlaybackControls();
+		return;
+	}
+
+	setPlaybackTime(next);
+}
+
+void GUI::scrubPlayback(int value)
+{
+	if (_playbackScrubbing || _playbackDurationMs <= 0)
+		return;
+
+	qint64 elapsed = _playbackSlider->maximum() > 0
+	  ? ((qint64)value * _playbackDurationMs) / _playbackSlider->maximum() : 0;
+	setPlaybackTime(_playbackStart.addMSecs(elapsed));
+	if (_playbackTimer->isActive())
+		_playbackElapsed.restart();
+}
+
+void GUI::speedChanged(int index)
+{
+	Q_UNUSED(index);
+	if (_playbackTimer->isActive())
+		_playbackElapsed.restart();
+}
+
+void GUI::showPlaybackSync()
+{
+	const VizConfig &viz = VizConfig::instance();
+	QStringList names(_mapView->trackNames());
+	if (names.isEmpty())
+		return;
+
+	QDialog dialog(this);
+	dialog.setWindowTitle(viz.syncDialogTitle);
+	QGridLayout *layout = new QGridLayout(&dialog);
+	layout->setContentsMargins(12, 12, 12, 12);
+	layout->setHorizontalSpacing(8);
+	layout->setVerticalSpacing(6);
+
+	layout->addWidget(new QLabel(viz.syncOffsetLabel, &dialog), 0, 1);
+	layout->addWidget(new QLabel(viz.syncDirectionLabel, &dialog), 0, 2);
+
+	QList<QDoubleSpinBox*> offsets;
+	double range = qMax(1.0, viz.syncRangeMinutes) * 60.0;
+	double step = qMax(0.1, viz.syncStepSeconds);
+	for (int i = 0; i < names.size(); i++) {
+		QLabel *name = new QLabel(names.at(i), &dialog);
+		QDoubleSpinBox *offset = new QDoubleSpinBox(&dialog);
+		offset->setRange(-range, range);
+		offset->setDecimals(step < 1.0 ? 1 : 0);
+		offset->setSingleStep(step);
+		offset->setSuffix(QString(" s"));
+		offset->setValue(_mapView->trackPlaybackOffset(i) / 1000.0);
+		offsets.append(offset);
+		QPushButton *reset = new QPushButton(viz.syncResetLabel, &dialog);
+
+		layout->addWidget(name, i + 1, 0);
+		layout->addWidget(offset, i + 1, 1);
+		layout->addWidget(reset, i + 1, 2);
+
+		connect(offset, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+		  this, [this, i](double value) {
+			_mapView->setTrackPlaybackOffset(i, (qint64)(value * 1000.0));
+		});
+		connect(reset, &QPushButton::clicked, this, [this, offset, i]() {
+			offset->setValue(0.0);
+			_mapView->setTrackPlaybackOffset(i, 0);
+		});
+	}
+
+	QPushButton *resetAll = new QPushButton(viz.syncResetAllLabel, &dialog);
+	layout->addWidget(resetAll, names.size() + 1, 0);
+	connect(resetAll, &QPushButton::clicked, this, [this, offsets]() {
+		for (int i = 0; i < offsets.size(); i++)
+			offsets.at(i)->setValue(0.0);
+		_mapView->resetTrackPlaybackOffsets();
+	});
+
+	QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Close,
+	  &dialog);
+	layout->addWidget(buttons, names.size() + 1, 1, 1, 2);
+	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
+
+	dialog.exec();
+	updatePlaybackControls();
+}
+
 void GUI::about()
 {
 	QMessageBox msgBox(this);
@@ -1740,6 +2033,8 @@ void GUI::plot(QPrinter *printer)
 
 void GUI::reloadFiles()
 {
+	_playbackTimer->stop();
+	_playbackButton->setChecked(false);
 	_trackCount = 0;
 	_routeCount = 0;
 	_waypointCount = 0;
@@ -1777,6 +2072,8 @@ void GUI::reloadFiles()
 
 void GUI::closeFiles()
 {
+	_playbackTimer->stop();
+	_playbackButton->setChecked(false);
 	_trackCount = 0;
 	_routeCount = 0;
 	_waypointCount = 0;

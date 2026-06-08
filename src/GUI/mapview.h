@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QList>
 #include <QFlags>
+#include <QDateTime>
 #include "common/rectc.h"
 #include "data/waypoint.h"
 #include "data/telemetry.h"
@@ -44,6 +45,8 @@ class MapAction;
 class CrosshairItem;
 class MotionInfoItem;
 class NavigationWidget;
+class QLabel;
+class QResizeEvent;
 
 class MapView : public QGraphicsView
 {
@@ -107,6 +110,13 @@ public:
 	const Projection &inputProjection() const {return _inputProjection;}
 	QStringList trackNames() const;
 	int activeTrack() const {return _activeTrack;}
+	int trackCount() const {return _tracks.size();}
+	qint64 trackPlaybackOffset(int index) const;
+	QDateTime playbackStart() const {return _playbackStart;}
+	QDateTime playbackEnd() const {return _playbackEnd;}
+	void setPlaybackClockFormat(const QString &format);
+	void setPlaybackClockStyle(const QString &style);
+	void showPlaybackClock(bool show);
 
 #ifdef Q_OS_ANDROID
 	NavigationWidget *navigation() {return _nav;}
@@ -133,6 +143,9 @@ public slots:
 	void showWaypoints(bool show);
 	void showRouteWaypoints(bool show);
 	void setMarkerPosition(qreal pos);
+	void setPlaybackTime(const QDateTime &time);
+	void setTrackPlaybackOffset(int index, qint64 offsetMs);
+	void resetTrackPlaybackOffsets();
 	void setActiveTrack(int index);
 	void followPosition(bool follow);
 	void showMotionInfo(bool show);
@@ -145,6 +158,7 @@ signals:
 	void markerTelemetry(const QString &name, const Coordinates &pos,
 	  const Telemetry &telemetry);
 	void tracksChanged();
+	void playbackRangeChanged(const QDateTime &start, const QDateTime &end);
 
 private slots:
 	void updatePOI();
@@ -157,6 +171,9 @@ private slots:
 
 private:
 	void refreshRadarOverlay();
+	void updatePlaybackRange();
+	void updatePlaybackClock();
+	void positionPlaybackClock();
 	typedef QHash<SearchPointer<Waypoint>, WaypointItem*> POIHash;
 
 	PathItem *addTrack(const Track &track);
@@ -192,6 +209,7 @@ private:
 	void keyReleaseEvent(QKeyEvent *event);
 	void drawBackground(QPainter *painter, const QRectF &rect);
 	void paintEvent(QPaintEvent *event);
+	void resizeEvent(QResizeEvent *event);
 	void leaveEvent(QEvent *event);
 
 	bool event(QEvent *event);
@@ -204,6 +222,11 @@ private:
 	MotionInfoItem *_motionInfo;
 	LegendItem *_legend;
 	RadarOverlayItem *_radarOverlay;
+	QLabel *_playbackClock;
+	QString _playbackClockFormat;
+	QDateTime _playbackStart, _playbackEnd, _playbackTime;
+	QVector<qint64> _trackPlaybackOffsets;
+	bool _playbackMarkerValid;
 	Coordinates _radarPos;          // cached marker position (zoom-invariant)
 	Telemetry _radarTelemetry;      // cached marker telemetry, for re-projection
 	int _activeTrack;               // which track drives the dock + overlay

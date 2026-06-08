@@ -7,6 +7,8 @@
 #include <QClipboard>
 #include <QOpenGLWidget>
 #include <QGeoPositionInfoSource>
+#include <QLabel>
+#include <QResizeEvent>
 #include "data/poi.h"
 #include "data/data.h"
 #include "map/map.h"
@@ -66,6 +68,12 @@ MapView::MapView(Map *map, POI *poi, QWidget *parent)
 	_radarOverlay->setMap(_map);
 	_scene->addItem(_radarOverlay);
 	connect(this, &MapView::markerTelemetry, this, &MapView::updateRadarOverlay);
+
+	_playbackClock = new QLabel(this);
+	_playbackClock->setAlignment(Qt::AlignCenter);
+	_playbackClock->setAttribute(Qt::WA_TransparentForMouseEvents);
+	_playbackClock->setVisible(false);
+	_playbackClockFormat = "yyyy-MM-dd HH:mm:ss";
 
 	_deviceRatio = devicePixelRatioF();
 	_outputProjection = PCS::pcs(3857);
@@ -139,6 +147,7 @@ MapView::MapView(Map *map, POI *poi, QWidget *parent)
 	_wheelDelta = 0;
 	_activeTrack = 0;
 	_markerPos = 0;
+	_playbackMarkerValid = false;
 
 	_res = _map->resolution(_map->bounds());
 	_scene->setSceneRect(_map->bounds());
@@ -190,6 +199,7 @@ PathItem *MapView::addTrack(const Track &track)
 	TrackItem *ti = new TrackItem(track, _map);
 	connect(ti, &PathItem::markerTelemetry, this, &MapView::onMarkerTelemetry);
 	_tracks.append(ti);
+	_trackPlaybackOffsets.append(0);
 	emit tracksChanged();
 	_tr |= ti->path().boundingRect();
 	ti->setColor(_palette.nextColor());
@@ -331,6 +341,7 @@ QList<PathItem *> MapView::loadData(const Data &data)
 	for (int i = 0; i < data.routes().count(); i++)
 		paths.append(addRoute(data.routes().at(i)));
 	addWaypoints(data.waypoints());
+	updatePlaybackRange();
 
 	if (_tracks.empty() && _routes.empty() && _waypoints.empty()
 	  && _areas.empty())
@@ -853,11 +864,18 @@ void MapView::clear()
 {
 	_pois.clear();
 	_tracks.clear();
+	_trackPlaybackOffsets.clear();
 	_routes.clear();
 	_areas.clear();
 	_waypoints.clear();
 	_activeTrack = 0;
+	_playbackStart = QDateTime();
+	_playbackEnd = QDateTime();
+	_playbackTime = QDateTime();
+	_playbackMarkerValid = false;
+	updatePlaybackClock();
 	emit tracksChanged();
+	emit playbackRangeChanged(_playbackStart, _playbackEnd);
 
 	_scene->removeItem(_mapScale);
 	_scene->removeItem(_cursorCoordinates);
@@ -865,6 +883,7 @@ void MapView::clear()
 	_scene->removeItem(_crosshair);
 	_scene->removeItem(_motionInfo);
 	_scene->removeItem(_legend);
+	_scene->removeItem(_radarOverlay);
 	_scene->clear();
 	_scene->addItem(_mapScale);
 	_scene->addItem(_cursorCoordinates);
@@ -873,6 +892,8 @@ void MapView::clear()
 	_scene->addItem(_motionInfo);
 	_legend->clear();
 	_scene->addItem(_legend);
+	_radarOverlay->clear();
+	_scene->addItem(_radarOverlay);
 
 	_palette.reset();
 
@@ -1246,6 +1267,23 @@ void MapView::paintEvent(QPaintEvent *event)
 	QGraphicsView::paintEvent(event);
 }
 
+void MapView::resizeEvent(QResizeEvent *event)
+{
+	QGraphicsView::resizeEvent(event);
+	positionPlaybackClock();
+}
+
+void MapView::positionPlaybackClock()
+{
+	if (!_playbackClock)
+		return;
+
+	QSize s(_playbackClock->sizeHint());
+	int x = qMax(0, (viewport()->width() - s.width()) / 2);
+	_playbackClock->setGeometry(x, 12, s.width(), s.height());
+	_playbackClock->raise();
+}
+
 void MapView::scrollContentsBy(int dx, int dy)
 {
 	QGraphicsView::scrollContentsBy(dx, dy);
@@ -1415,6 +1453,8 @@ void MapView::setMarkerColor(const QColor &color)
 void MapView::setMarkerPosition(qreal pos)
 {
 	_markerPos = pos;
+	_playbackMarkerValid = false;
+	_playbackClock->setVisible(false);
 	// clear the radar overlay first; tracks with telemetry re-set it
 	// synchronously via the markerTelemetry signal during the loop below.
 	if (_radarOverlay)
@@ -1423,6 +1463,80 @@ void MapView::setMarkerPosition(qreal pos)
 		_tracks.at(i)->setMarkerPosition(pos);
 	for (int i = 0; i < _routes.size(); i++)
 		_routes.at(i)->setMarkerPosition(pos);
+}
+
+void MapView::setPlaybackTime(const QDateTime &time)
+{
+	_playbackTime = time;
+	_playbackMarkerValid = time.isValid();
+	updatePlaybackClock();
+
+	if (_radarOverlay)
+		_radarOverlay->clear();
+	for (int i = 0; i < _tracks.size(); i++)
+		_tracks.at(i)->setMarkerTime(time.addMSecs(-trackPlaybackOffset(i)));
+}
+
+void MapView::updatePlaybackRange()
+{
+	QDateTime start, end;
+
+	for (int i = 0; i < _tracks.size(); i++) {
+		QPair<QDateTime, QDateTime> range(_tracks.at(i)->timeRange());
+		if (!range.first.isValid() || !range.second.isValid())
+			continue;
+		qint64 offset = trackPlaybackOffset(i);
+		QDateTime shiftedStart = range.first.addMSecs(offset);
+		QDateTime shiftedEnd = range.second.addMSecs(offset);
+		if (!start.isValid() || shiftedStart < start)
+			start = shiftedStart;
+		if (!end.isValid() || shiftedEnd > end)
+			end = shiftedEnd;
+	}
+
+	if (start == _playbackStart && end == _playbackEnd)
+		return;
+
+	_playbackStart = start;
+	_playbackEnd = end;
+	_playbackTime = start;
+	_playbackMarkerValid = false;
+	updatePlaybackClock();
+	emit playbackRangeChanged(_playbackStart, _playbackEnd);
+}
+
+void MapView::setPlaybackClockFormat(const QString &format)
+{
+	if (!format.isEmpty())
+		_playbackClockFormat = format;
+	updatePlaybackClock();
+}
+
+void MapView::setPlaybackClockStyle(const QString &style)
+{
+	if (!style.isEmpty())
+		_playbackClock->setStyleSheet(style);
+	_playbackClock->adjustSize();
+	positionPlaybackClock();
+}
+
+void MapView::showPlaybackClock(bool show)
+{
+	_playbackClock->setVisible(show && _playbackTime.isValid());
+}
+
+void MapView::updatePlaybackClock()
+{
+	if (!_playbackTime.isValid()) {
+		_playbackClock->clear();
+		_playbackClock->setVisible(false);
+		return;
+	}
+
+	_playbackClock->setText(_playbackTime.toString(_playbackClockFormat));
+	_playbackClock->adjustSize();
+	_playbackClock->setVisible(true);
+	positionPlaybackClock();
 }
 
 void MapView::updateRadarOverlay(const QString &name, const Coordinates &pos,
@@ -1464,7 +1578,49 @@ void MapView::setActiveTrack(int index)
 		return;
 	_activeTrack = index;
 	// Re-apply the current marker so the dock + overlay switch immediately.
-	setMarkerPosition(_markerPos);
+	if (_playbackMarkerValid)
+		setPlaybackTime(_playbackTime);
+	else
+		setMarkerPosition(_markerPos);
+}
+
+qint64 MapView::trackPlaybackOffset(int index) const
+{
+	return (index >= 0 && index < _trackPlaybackOffsets.size())
+	  ? _trackPlaybackOffsets.at(index) : 0;
+}
+
+void MapView::setTrackPlaybackOffset(int index, qint64 offsetMs)
+{
+	if (index < 0 || index >= _tracks.size())
+		return;
+
+	while (_trackPlaybackOffsets.size() < _tracks.size())
+		_trackPlaybackOffsets.append(0);
+	if (_trackPlaybackOffsets.at(index) == offsetMs)
+		return;
+
+	_trackPlaybackOffsets[index] = offsetMs;
+	updatePlaybackRange();
+	if (_playbackTime.isValid())
+		setPlaybackTime(_playbackTime);
+}
+
+void MapView::resetTrackPlaybackOffsets()
+{
+	bool changed = false;
+	for (int i = 0; i < _trackPlaybackOffsets.size(); i++) {
+		if (_trackPlaybackOffsets.at(i) != 0) {
+			_trackPlaybackOffsets[i] = 0;
+			changed = true;
+		}
+	}
+	if (!changed)
+		return;
+
+	updatePlaybackRange();
+	if (_playbackTime.isValid())
+		setPlaybackTime(_playbackTime);
 }
 
 QStringList MapView::trackNames() const

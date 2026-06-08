@@ -8,11 +8,10 @@
 #define RAD2DEG(x) ((x) * 180.0 / M_PI)
 #define EARTH_R   6371000.0   // WGS84 mean radius (physical constant)
 #define Z_VALUE   3.0         // Qt scene draw order (above tracks/markers)
-// All telemetry semantics (FOV range, scan default, mode colours,
-// target colour/size) come from VizConfig (viz.cfg) — nothing hard-coded.
 
 RadarOverlayItem::RadarOverlayItem(QGraphicsItem *parent)
-  : QGraphicsItem(parent), _map(0), _active(false), _hasTarget(false), _mode(0)
+  : QGraphicsItem(parent), _map(0), _active(false), _hasLookRay(false),
+    _hasTrack(false), _hasContact(false), _mode(0)
 {
 	setZValue(Z_VALUE);
 	setVisible(false);
@@ -35,7 +34,9 @@ void RadarOverlayItem::clear()
 	if (_active || isVisible()) {
 		prepareGeometryChange();
 		_active = false;
-		_hasTarget = false;
+		_hasLookRay = false;
+		_hasTrack = false;
+		_hasContact = false;
 		_bound = QRectF();
 		setVisible(false);
 		update();
@@ -44,7 +45,7 @@ void RadarOverlayItem::clear()
 
 void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 {
-	if (!_map || !pos.isValid() || std::isnan(t.yaw)) {
+	if (!_map || !pos.isValid()) {
 		clear();
 		return;
 	}
@@ -57,42 +58,64 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	const VizConfig &cfg = VizConfig::instance();
 	_mode = std::isnan(t.radarMode) ? 0 : (int)(t.radarMode + 0.5);
 	_cone.clear();
-	_hasTarget = false;
+	_hasLookRay = false;
+	_hasTrack = false;
+	_hasContact = false;
+	_lookRay = QPointF();
+	_track = QPointF();
+	_contact = QPointF();
 
-	// Radar FOV wedge (only when the radar is on and a scan width is known).
-	bool radarOn = cfg.radarOn(t.radarMode);
+	// Continuous radar state: a raw search-mode field can read OFF while locked,
+	// so use radarState + effective azimuth (lock azimuth in LOCK, search azimuth
+	// otherwise) so the overlay tracks the target during a lock instead of
+	// pointing at the stale search azimuth.
+	bool haveState = !std::isnan(t.radarState);
+	bool radarOn = haveState ? ((int)(t.radarState + 0.5) >= 1)
+	  : cfg.radarOn(t.radarMode);
+	double azimuth = !std::isnan(t.radarAz) ? t.radarAz : t.lookAzimuth;
 	double scan = std::isnan(t.radarScan) ? cfg.scanDefaultDeg : t.radarScan;
-	if (radarOn && scan > 0) {
+	double scanCenter = std::isnan(azimuth) ? t.yaw : azimuth;
+	if (cfg.showScanWedge && radarOn && scan > 0 && !std::isnan(scanCenter)) {
 		double half = scan / 2.0;
 		_cone << QPointF(0, 0);
 		const int steps = 12;
 		for (int i = 0; i <= steps; i++) {
-			double a = t.yaw - half + (scan * i / steps);
+			double a = scanCenter - half + (scan * i / steps);
 			QPointF p(_map->ll2xy(destination(pos, a, cfg.fovRangeMeters)));
 			_cone << (p - apex);
 		}
 		_cone << QPointF(0, 0);
 	}
-	// boresight (nose direction) tick
-	_boresight = _map->ll2xy(destination(pos, t.yaw,
-	  cfg.fovRangeMeters * 0.55)) - apex;
 
-	// wedge colour by radar mode (from viz.cfg)
 	_color = cfg.radarModeColor(_mode);
 
-	// Contact -> project to a geographic point and mark it.
-	if (!std::isnan(t.contactBearing) && !std::isnan(t.contactRange)
-	  && t.contactRange > 0) {
-		Coordinates c(destination(pos, t.yaw + t.contactBearing, t.contactRange));
-		_target = _map->ll2xy(c) - apex;
-		_hasTarget = true;
+	if (cfg.showLookRay && !std::isnan(azimuth)) {
+		_lookRay = _map->ll2xy(destination(pos, azimuth,
+		  cfg.fovRangeMeters * 0.75)) - apex;
+		_hasLookRay = true;
 	}
 
-	// bounding rect = union of cone, boresight, target (+margin)
+	if (cfg.showTrack && !std::isnan(t.yaw) && !std::isnan(t.trackBearing)
+	  && !std::isnan(t.trackRange) && t.trackRange > 0) {
+		Coordinates c(destination(pos, t.yaw + t.trackBearing, t.trackRange));
+		_track = _map->ll2xy(c) - apex;
+		_hasTrack = true;
+	}
+
+	if (cfg.showContact && !std::isnan(t.yaw) && !std::isnan(t.contactBearing)
+	  && !std::isnan(t.contactRange) && t.contactRange > 0) {
+		Coordinates c(destination(pos, t.yaw + t.contactBearing, t.contactRange));
+		_contact = _map->ll2xy(c) - apex;
+		_hasContact = true;
+	}
+
 	QRectF b = _cone.boundingRect();
-	b |= QRectF(_boresight, QSizeF(1, 1));
-	if (_hasTarget)
-		b |= QRectF(_target - QPointF(12, 12), QSizeF(24, 24));
+	if (_hasLookRay)
+		b |= QRectF(_lookRay, QSizeF(1, 1));
+	if (_hasTrack)
+		b |= QRectF(_track - QPointF(16, 16), QSizeF(32, 32));
+	if (_hasContact)
+		b |= QRectF(_contact - QPointF(16, 16), QSizeF(32, 32));
 	_bound = b.adjusted(-4, -4, 4, 4);
 
 	_active = true;
@@ -110,34 +133,44 @@ void RadarOverlayItem::paint(QPainter *painter,
 
 	painter->setRenderHint(QPainter::Antialiasing, true);
 
-	// FOV wedge
 	if (_cone.size() > 2) {
 		QColor fill(_color); fill.setAlpha(45);
 		painter->setPen(QPen(_color, 1.5));
 		painter->setBrush(fill);
 		painter->drawPolygon(_cone);
 	}
-	// boresight
-	painter->setPen(QPen(_color, 1.0, Qt::DashLine));
-	painter->drawLine(QPointF(0, 0), _boresight);
 
-	// aircraft apex dot
+	const VizConfig &cfg = VizConfig::instance();
+	if (_hasLookRay) {
+		painter->setPen(QPen(cfg.lookRayColor, cfg.lookRayWidthPx, Qt::DashLine));
+		painter->drawLine(QPointF(0, 0), _lookRay);
+	}
+
 	painter->setPen(Qt::NoPen);
 	painter->setBrush(QColor(0, 0, 0));
 	painter->drawEllipse(QPointF(0, 0), 3, 3);
 
-	// contact / target (colour + marker size from viz.cfg)
-	if (_hasTarget) {
-		const VizConfig &cfg = VizConfig::instance();
-		QColor tc(cfg.targetColor);
-		painter->setPen(QPen(tc, 1.0, Qt::DotLine));
+	if (_hasTrack) {
+		painter->setPen(QPen(cfg.trackColor, cfg.targetLineWidthPx, Qt::DotLine));
 		painter->setBrush(Qt::NoBrush);
-		painter->drawLine(QPointF(0, 0), _target);
+		painter->drawLine(QPointF(0, 0), _track);
 
-		painter->setPen(QPen(tc, 2.0));
-		double r = cfg.targetMarkerRadiusPx;
-		painter->drawEllipse(_target, r, r);
-		painter->drawLine(_target + QPointF(-r - 3, 0), _target + QPointF(r + 3, 0));
-		painter->drawLine(_target + QPointF(0, -r - 3), _target + QPointF(0, r + 3));
+		painter->setPen(QPen(cfg.trackColor, 2.0));
+		double r = cfg.trackMarkerRadiusPx;
+		painter->drawRect(QRectF(_track - QPointF(r, r), QSizeF(r * 2, r * 2)));
+		painter->drawLine(_track + QPointF(-r - 3, 0), _track + QPointF(r + 3, 0));
+		painter->drawLine(_track + QPointF(0, -r - 3), _track + QPointF(0, r + 3));
+	}
+
+	if (_hasContact) {
+		painter->setPen(QPen(cfg.contactColor, cfg.targetLineWidthPx, Qt::DotLine));
+		painter->setBrush(Qt::NoBrush);
+		painter->drawLine(QPointF(0, 0), _contact);
+
+		painter->setPen(QPen(cfg.contactColor, 2.0));
+		double r = cfg.contactMarkerRadiusPx;
+		painter->drawEllipse(_contact, r, r);
+		painter->drawLine(_contact + QPointF(-r - 3, 0), _contact + QPointF(r + 3, 0));
+		painter->drawLine(_contact + QPointF(0, -r - 3), _contact + QPointF(0, r + 3));
 	}
 }

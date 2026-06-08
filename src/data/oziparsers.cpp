@@ -17,7 +17,7 @@ static bool isASCII(const QByteArray &ba)
 	return true;
 }
 
-static QByteArray &decode(QByteArray &ba)
+static QByteArray &normalizeField(QByteArray &ba)
 {
 	if (isASCII(ba))
 		ba.replace('\xD1', ',');
@@ -165,11 +165,11 @@ bool RTEParser::parse(QFile *file, QList<TrackData> &tracks,
 
 				if (list.size() >= 3) {
 					QByteArray name(list.at(2).trimmed());
-					routes.last().setName(decode(name));
+					routes.last().setName(normalizeField(name));
 				}
 				if (list.size() >= 4) {
 					QByteArray description(list.at(3).trimmed());
-					routes.last().setDescription(decode(description));
+					routes.last().setDescription(normalizeField(description));
 				}
 				if (list.size() >= 5 && !list.at(4).isEmpty())
 					routes.last().setStyle(
@@ -195,7 +195,7 @@ bool RTEParser::parse(QFile *file, QList<TrackData> &tracks,
 
 				QByteArray name(list.at(4).trimmed());
 				if (!name.isEmpty())
-					wp.setName(decode(name));
+					wp.setName(normalizeField(name));
 				if (list.size() >= 8) {
 					QByteArray field(list.at(7).trimmed());
 					if (!field.isEmpty()) {
@@ -211,7 +211,7 @@ bool RTEParser::parse(QFile *file, QList<TrackData> &tracks,
 				if (list.size() >= 14) {
 					QByteArray description(list.at(13).trimmed());
 					if (!description.isEmpty())
-						wp.setDescription(decode(description));
+						wp.setDescription(normalizeField(description));
 				}
 
 				routes.last().append(wp);
@@ -277,7 +277,7 @@ bool WPTParser::parse(QFile *file, QList<TrackData> &tracks,
 
 			QByteArray name(list.at(1).trimmed());
 			if (!name.isEmpty())
-				wp.setName(decode(name));
+				wp.setName(normalizeField(name));
 			if (list.size() >= 5) {
 				QByteArray field(list.at(4).trimmed());
 				if (!field.isEmpty()) {
@@ -295,7 +295,7 @@ bool WPTParser::parse(QFile *file, QList<TrackData> &tracks,
 			if (list.size() >= 11) {
 				QByteArray description(list.at(10).trimmed());
 				if (!description.isEmpty())
-					wp.setDescription(decode(description));
+					wp.setDescription(normalizeField(description));
 			}
 			if (list.size() >= 15) {
 				QByteArray field(list.at(14).trimmed());

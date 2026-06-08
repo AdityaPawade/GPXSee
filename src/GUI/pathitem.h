@@ -53,6 +53,8 @@ public:
 	void showVideo(bool show);
 
 	void setMarkerPosition(qreal pos);
+	void setMarkerTime(const QDateTime &time);
+	QPair<QDateTime, QDateTime> timeRange() const;
 
 	void updateTicks();
 	void updateMarkerInfo();
@@ -89,6 +91,7 @@ protected:
 
 private:
 	const PathSegment *segment(qreal x) const;
+	const PathSegment *timeSegment(const QDateTime &time) const;
 	const PathPoint *pointAtDistance(qreal x) const;
 	QPointF position(qreal distance) const;
 	void updatePainterPath();

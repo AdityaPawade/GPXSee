@@ -8,9 +8,7 @@
 
 class Map;
 
-/* Map overlay drawn at the cursor aircraft position. Renders the radar
-   field-of-view wedge (heading +- scan/2, coloured by mode) and, when a contact
-   is present, a target marker projected at (heading+contactBearing, contactRange). */
+/* Map overlay drawn at the cursor track position. */
 class RadarOverlayItem : public QGraphicsItem
 {
 public:
@@ -30,11 +28,14 @@ private:
 
 	Map *_map;
 	bool _active;
-	bool _hasTarget;
+	bool _hasLookRay;
+	bool _hasTrack;
+	bool _hasContact;
 	int _mode;
 	QPolygonF _cone;     // local coords relative to apex (this item's pos)
-	QPointF _boresight;  // local
-	QPointF _target;     // local
+	QPointF _lookRay;    // local
+	QPointF _track;      // local
+	QPointF _contact;    // local
 	QColor _color;
 	QRectF _bound;
 };

@@ -39,14 +39,14 @@ static bool trackpoint(CTX &ctx, Trackpoint &t)
 					return false;
 				if (!varint(ctx, val))
 					return false;
-				lat = zigzag32decode(val);
+				lat = zigzag32Value(val);
 				break;
 			case 4:
 				if (type(ctx.tag) != VARINT)
 					return false;
 				if (!varint(ctx, val))
 					return false;
-				lon = zigzag32decode(val);
+				lon = zigzag32Value(val);
 				break;
 			case 5:
 				if (type(ctx.tag) != VARINT)

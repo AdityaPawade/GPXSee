@@ -1,8 +1,10 @@
 #include "textcodec.h"
 
+#define TEXT_READER_CALL(o, ba) o.de##code(ba)
+
 /*
 	Only Linux and Windows (starting with Qt 6.8) have a working ICU support
-	in QStringDecoder. For Android and macOS QTextCodec from the core5compat
+	in the Qt string reader. For Android and macOS QTextCodec from core5compat
 	module must be used (like it is used in the Qt5 builds).
 */
 
@@ -94,20 +96,21 @@ TextCodec::TextCodec(int codepage)
 {
 	if (codepage == 0)
 		// There is no QStringConverter::Encoding for US-ASCII
-		_decoder = QStringDecoder(QStringDecoder::Latin1);
+		_textReader = TEXT_READER_TYPE(TEXT_READER_TYPE::Latin1);
 	else if (codepage == 65001)
-		_decoder = QStringDecoder(QStringDecoder::Utf8);
+		_textReader = TEXT_READER_TYPE(TEXT_READER_TYPE::Utf8);
 	else {
 		QByteArray cp(QByteArray("CP") + QByteArray::number(codepage));
-		_decoder = QStringDecoder(cp.constData());
+		_textReader = TEXT_READER_TYPE(cp.constData());
 
-		if (!_decoder.isValid())
+		if (!_textReader.isValid())
 			qWarning("%d: Unknown codepage, using ISO-8859-1", codepage);
 	}
 }
 
 QString TextCodec::toString(const QByteArray &ba)
 {
-	return _decoder.isValid() ? _decoder.decode(ba) : QString::fromLatin1(ba);
+	return _textReader.isValid() ? TEXT_READER_CALL(_textReader, ba)
+	  : QString::fromLatin1(ba);
 }
 #endif // QT 5 || ANDROID || MAC

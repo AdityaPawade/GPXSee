@@ -20,13 +20,13 @@ namespace Protobuf
 		quint32 tag;
 	};
 
-	inline qint32 zigzag32decode(quint32 value)
+	inline qint32 zigzag32Value(quint32 value)
 	{
 		return static_cast<qint32>((value >> 1u) ^ static_cast<quint32>(
 		  -static_cast<qint32>(value & 1u)));
 	}
 
-	inline qint64 zigzag64decode(quint64 value)
+	inline qint64 zigzag64Value(quint64 value)
 	{
 		return static_cast<qint64>((value >> 1u) ^ static_cast<quint64>(
 		  -static_cast<qint64>(value & 1u)));

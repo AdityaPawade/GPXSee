@@ -3,30 +3,43 @@
 
 #include <cmath>
 
-/* Per-point telemetry carried on each track/path point. Populated from the
-   custom GPX <extensions> tags on each <trkpt>. NAN / -1 = absent.
-   Used by the Live Stats dock and the radar/target map overlays. */
+/* Per-point telemetry carried on each track/path point. Populated from optional
+   GPX telemetry extensions on each <trkpt>. NAN / -1 = absent. */
 struct Telemetry
 {
 	Telemetry()
-	  : roll(NAN), pitch(NAN), yaw(NAN), airspeed(NAN), vspeed(NAN),
-	    rollRate(NAN), yawRate(NAN), fuelPct(NAN), navBearing(NAN),
-	    navRange(NAN), radarMode(NAN), radarScan(NAN),
-	    contactBearing(NAN), contactRange(NAN), weapon(NAN),
-	    gear(-1), wow(-1), autoSlats(-1) {}
+	  : roll(NAN), pitch(NAN), yaw(NAN), airspeed(NAN), airspeedKt(NAN),
+	    vspeed(NAN),
+	    rollRate(NAN), yawRate(NAN), fuelRaw(NAN), fuelPct(NAN), fuelKg(NAN),
+	    navBearing(NAN), navRange(NAN), radarMode(NAN), radarScan(NAN),
+	    radarScanProgram(NAN), lookAzimuth(NAN),
+	    radarState(NAN), radarAz(NAN), radarLockMode(NAN), radarLockWidth(NAN),
+	    trackBearing(NAN),
+	    trackRange(NAN), contactBearing(NAN), contactRange(NAN),
+	    contactAltitude(NAN), event(NAN), gear(-1), wow(-1), wowRaw(-1),
+	    autoSlats(-1) {}
 
 	bool isValid() const
 	{
 		return !std::isnan(yaw) || !std::isnan(roll) || !std::isnan(radarMode)
-		  || gear >= 0 || wow >= 0;
+		  || !std::isnan(radarState)
+		  || !std::isnan(lookAzimuth) || !std::isnan(trackRange)
+		  || !std::isnan(contactRange) || gear >= 0 || wow >= 0;
 	}
 
-	qreal roll, pitch, yaw, airspeed, vspeed;
-	qreal rollRate, yawRate, fuelPct, navBearing, navRange;
-	qreal radarMode, radarScan;          // radar status (mode enum, scan width deg)
-	qreal contactBearing, contactRange;  // contact (relative bearing deg, range m)
-	qreal weapon;                        // weapon/engagement flag (1 = active)
-	int gear, wow, autoSlats;            // discretes (1/0, -1 = absent)
+	qreal roll, pitch, yaw, airspeed, airspeedKt, vspeed;
+	qreal rollRate, yawRate, fuelRaw, fuelPct, fuelKg, navBearing, navRange;
+	qreal radarMode, radarScan, radarScanProgram;
+	qreal lookAzimuth;
+	/* Continuous radar state: 0=OFF, 1=SEARCH, 2=LOCK. Some sources stop emitting
+	   the search-mode field while locked on a single target, so a raw mode field
+	   can read OFF while still tracking; radarState stays meaningful. radarAz is
+	   the effective antenna azimuth for the active phase. */
+	qreal radarState, radarAz, radarLockMode, radarLockWidth;
+	qreal trackBearing, trackRange;
+	qreal contactBearing, contactRange, contactAltitude;
+	qreal event;
+	int gear, wow, wowRaw, autoSlats;
 };
 
 #endif // TELEMETRY_H

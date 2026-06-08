@@ -88,7 +88,7 @@ bool JLS::processRunMode(BitStream &bs, Context &ctx, quint16 col,
 	}
 }
 
-bool JLS::decodeError(BitStream &bs, quint8 limit, quint8 k,
+bool JLS::readError(BitStream &bs, quint8 limit, quint8 k,
   uint &MErrval) const
 {
 	quint8 cnt = 0;
@@ -149,7 +149,7 @@ bool JLS::readLine(BitStream &bs, Context &ctx) const
 			for (k = 0; ctx.n[1] << k < ctx.a[1]; k++)
 				;
 
-			if (!decodeError(bs, _limit, k, MErrval))
+			if (!readError(bs, _limit, k, MErrval))
 				return false;
 
 			int mes, meh;
@@ -237,7 +237,7 @@ bool JLS::readLine(BitStream &bs, Context &ctx) const
 			for (k = 0; ctx.n[rctx + 2] << k < TEMP; k++)
 				;
 
-			if (!decodeError(bs, _limit - ctx.lrk, k, MErrval))
+			if (!readError(bs, _limit - ctx.lrk, k, MErrval))
 				return false;
 
 			quint16 s = ((k == 0) && (rctx || MErrval)) ?
@@ -297,7 +297,7 @@ bool JLS::readLine(BitStream &bs, Context &ctx) const
 	return true;
 }
 
-bool JLS::decode(const SubFile *file, SubFile::Handle &hdl,
+bool JLS::readImage(const SubFile *file, SubFile::Handle &hdl,
   Matrix<qint16> &img) const
 {
 	Context ctx(img.w(), _range);

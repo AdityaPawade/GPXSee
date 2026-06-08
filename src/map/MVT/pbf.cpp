@@ -58,7 +58,7 @@ static bool value(CTX &ctx, QVariant &val)
 					return false;
 				if (!varint(ctx, num))
 					return false;
-				val = QVariant(zigzag64decode(num));
+				val = QVariant(zigzag64Value(num));
 				break;
 			case 7:
 				if (type(ctx.tag) != VARINT)

@@ -3,6 +3,7 @@
 
 #include <QVector>
 #include <QRectF>
+#include <QDateTime>
 #include "common/coordinates.h"
 #include "common/rectc.h"
 #include "telemetry.h"
@@ -18,14 +19,21 @@ public:
 	PathPoint(const Coordinates &coordinates, qreal distance,
 	  const Telemetry &telemetry)
 	  : _coordinates(coordinates), _distance(distance), _telemetry(telemetry) {}
+	PathPoint(const Coordinates &coordinates, qreal distance,
+	  const QDateTime &timestamp, const Telemetry &telemetry)
+	  : _coordinates(coordinates), _distance(distance), _timestamp(timestamp),
+	  _telemetry(telemetry) {}
 
 	const Coordinates &coordinates() const {return _coordinates;}
 	qreal distance() const {return _distance;}
+	const QDateTime &timestamp() const {return _timestamp;}
 	const Telemetry &telemetry() const {return _telemetry;}
+	bool hasTimestamp() const {return _timestamp.isValid();}
 
 private:
 	Coordinates _coordinates;
 	qreal _distance;
+	QDateTime _timestamp;
 	Telemetry _telemetry;
 };
 

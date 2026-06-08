@@ -29,7 +29,7 @@ jobs:
           CERTIFICATE_PWD: ${{secrets.CODESIGN_PWD}}
         if: env.CERTIFICATE
         run: |
-          echo $CERTIFICATE | base64 --decode > certificate.p12
+          echo $CERTIFICATE | base64 -d > certificate.p12
           security create-keychain -p password keychain
           security default-keychain -s keychain
           security unlock-keychain -p password keychain

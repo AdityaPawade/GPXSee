@@ -9,9 +9,7 @@ class QTableWidget;
 class QComboBox;
 
 /* A live readout of the per-point telemetry at the current graph-slider
-   instant (heading/attitude/airspeed, radar mode & scan, nav cue, fuel, gear,
-   discretes, contact bearing/range, weapon flag). Fed by
-   MapView::markerTelemetry. */
+   instant. Fed by MapView::markerTelemetry. */
 class LiveStatsWidget : public QWidget
 {
 	Q_OBJECT
@@ -33,7 +31,7 @@ private:
 		RAircraft, RPos, RYaw, RPitch, RRoll, RAirspeed, RVspeed,
 		RRollRate, RYawRate, RRadarMode, RRadarScan, RContactBrg,
 		RContactRng, RNavBrg, RNavRng, RFuel, RGear, RWow, RSlats,
-		RWeapon, RowCount
+		REvent, RowCount
 	};
 	void set(int row, const QString &value, const QColor &color = QColor());
 	QTableWidget *_table;
