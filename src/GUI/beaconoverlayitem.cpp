@@ -69,7 +69,9 @@ void BeaconOverlayItem::paint(QPainter *painter,
 		return;
 
 	const VizConfig &cfg = VizConfig::instance();
-	QColor color(_trackColor.isValid() ? _trackColor : cfg.beaconColor);
+	// The nav-beacon ray is an attribute overlay: it keeps its own dedicated
+	// colour and does NOT follow the per-track colour.
+	QColor color(cfg.beaconColor);
 	painter->setRenderHint(QPainter::Antialiasing, true);
 	painter->setPen(QPen(color, 2.0, Qt::DashDotLine));
 	painter->setBrush(Qt::NoBrush);

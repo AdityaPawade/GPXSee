@@ -89,7 +89,9 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		_cone << QPointF(0, 0);
 	}
 
-	_color = _trackColor.isValid() ? _trackColor : cfg.radarModeColor(_mode);
+	// The radar FOV is a sensor-attribute overlay: it keeps its own dedicated
+	// colour and does NOT follow the per-track colour.
+	_color = cfg.radarModeColor(_mode);
 
 	if ((_components & LookRay) && cfg.showLookRay && !std::isnan(azimuth)) {
 		_lookRay = _map->ll2xy(destination(pos, azimuth,
@@ -113,9 +115,14 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		_hasContact = true;
 	}
 
+	// Always span from the apex (0,0): the look-ray / track / contact lines all
+	// start there, so the bounding rect must include it. Without this, in LOCK
+	// (no FOV wedge) the rect would cover only the far endpoint and Qt would cull
+	// the whole item when zoomed in near the apex — the ray would vanish.
 	QRectF b = _cone.boundingRect();
+	b |= QRectF(-2, -2, 4, 4);
 	if (_hasLookRay)
-		b |= QRectF(_lookRay, QSizeF(1, 1));
+		b |= QRectF(_lookRay - QPointF(2, 2), QSizeF(4, 4));
 	if (_hasTrack)
 		b |= QRectF(_track - QPointF(16, 16), QSizeF(32, 32));
 	if (_hasContact)
@@ -145,7 +152,7 @@ void RadarOverlayItem::paint(QPainter *painter,
 	}
 
 	const VizConfig &cfg = VizConfig::instance();
-	QColor lookColor(_trackColor.isValid() ? _trackColor : cfg.lookRayColor);
+	QColor lookColor(cfg.lookRayColor);   // attribute colour, not the track colour
 	if (_hasLookRay) {
 		painter->setPen(QPen(lookColor, cfg.lookRayWidthPx, Qt::DashLine));
 		painter->drawLine(QPointF(0, 0), _lookRay);
