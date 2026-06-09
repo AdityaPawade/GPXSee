@@ -14,8 +14,9 @@ MarkerItem::MarkerItem(QGraphicsItem *parent) : QGraphicsItem(parent)
 
 QRectF MarkerItem::boundingRect() const
 {
-	// A touch larger than the crosshair so the rotated chevron always fits.
-	return QRectF(-SIZE, -SIZE, 2 * SIZE, 2 * SIZE);
+	// Pad beyond SIZE so the rotated chevron's wing tips (radius > SIZE) and the
+	// black outline pen always fit at any heading.
+	return QRectF(-SIZE - 2, -SIZE - 2, 2 * (SIZE + 2), 2 * (SIZE + 2));
 }
 
 void MarkerItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
@@ -45,7 +46,9 @@ void MarkerItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
 	  << QPointF(0, SIZE * 0.35)            // tail notch
 	  << QPointF(-SIZE * 0.7, SIZE * 0.8);  // left wing tip
 
-	painter->setPen(QPen(_color, 1.0));
+	// Black outline so the platform symbol stays visible against a track drawn
+	// in the same colour; the colour is the fill.
+	painter->setPen(QPen(Qt::black, 1.0));
 	painter->setBrush(_color);
 	painter->drawPolygon(chevron);
 
