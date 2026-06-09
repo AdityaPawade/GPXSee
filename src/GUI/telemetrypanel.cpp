@@ -81,6 +81,21 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	connect(_colorButton, &QToolButton::clicked, this,
 	  &TelemetryPanel::pickTrackColor);
 
+	// Master "show all" toggle in the Flight header: forces every overlay
+	// component the selected track exposes (radar FOV, look-ray, targets,
+	// beacon) on or off at once, regardless of their individual state.
+	_renderAllCheck = new QCheckBox(cfg.fieldLabel("render_all"), _flightSection);
+	_renderAllCheck->setToolTip(cfg.fieldLabel("render_all"));
+	_renderAllCheck->setFocusPolicy(Qt::NoFocus);
+	_flightSection->addHeaderWidget(_renderAllCheck);
+	connect(_renderAllCheck, &QCheckBox::toggled, this, [this](bool on) {
+		for (QHash<int, QCheckBox*>::const_iterator it
+		  = _overlayChecks.constBegin(); it != _overlayChecks.constEnd(); ++it) {
+			if (it.value()->isVisibleTo(this))
+				it.value()->setChecked(on);
+		}
+	});
+
 	layout->addWidget(_flightSection);
 	layout->addWidget(_attitudeSection);
 	layout->addWidget(_engineSection);
@@ -155,6 +170,26 @@ void TelemetryPanel::pickTrackColor()
 	emit trackColorChanged(idx, chosen);
 }
 
+void TelemetryPanel::syncRenderAll()
+{
+	// Master toggle reflects "all on": checked iff every overlay the current
+	// track exposes (its section is shown) is enabled; disabled when the track
+	// has no overlay components. Signal-blocked so this never drives the
+	// children (only a user click on the master does).
+	bool any = false, allOn = true;
+	for (QHash<int, QCheckBox*>::const_iterator it = _overlayChecks.constBegin();
+	  it != _overlayChecks.constEnd(); ++it) {
+		if (!it.value()->isVisibleTo(this))
+			continue;
+		any = true;
+		if (!it.value()->isChecked())
+			allOn = false;
+	}
+	QSignalBlocker blocker(_renderAllCheck);
+	_renderAllCheck->setEnabled(any);
+	_renderAllCheck->setChecked(any && allOn);
+}
+
 void TelemetryPanel::applyCapabilities()
 {
 	int idx = _flightCombo->currentIndex();
@@ -172,6 +207,7 @@ void TelemetryPanel::applyCapabilities()
 	_radarSection->setVisible(all || _capabilityProvider(idx, CapRadar));
 	_targetsSection->setVisible(all || _capabilityProvider(idx, CapTargets));
 	_beaconSection->setVisible(all || _capabilityProvider(idx, CapBeacon));
+	syncRenderAll();
 }
 
 QTableWidget *TelemetryPanel::createTable(const QStringList &keys) const
@@ -210,6 +246,7 @@ QCheckBox *TelemetryPanel::addOverlay(CollapsibleSection *section,
 	section->addHeaderWidget(box);
 	connect(box, &QCheckBox::toggled, this, [this, type](bool checked) {
 		emit overlayToggled(_flightCombo->currentIndex(), type, checked);
+		syncRenderAll();
 	});
 	return box;
 }
@@ -433,4 +470,5 @@ void TelemetryPanel::reloadOverlayState()
 		  ? _overlayStateProvider(_flightCombo->currentIndex(), it.key()) : false;
 		it.value()->setChecked(enabled);
 	}
+	syncRenderAll();
 }

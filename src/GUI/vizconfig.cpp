@@ -118,6 +118,7 @@ void VizConfig::loadDefaults()
 	fieldLabels.insert("value", "Value");
 	fieldLabels.insert("track_name", "Track");
 	fieldLabels.insert("track_color", "Track color");
+	fieldLabels.insert("render_all", "Show all");
 	fieldLabels.insert("position", "Position");
 	fieldLabels.insert("yaw", "Heading");
 	fieldLabels.insert("pitch", "Pitch");

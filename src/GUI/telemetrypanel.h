@@ -61,6 +61,9 @@ private:
 	  const QStringList &values, const QList<QColor> &colors, bool visible);
 	void applyCapabilities();
 	void pickTrackColor();
+	// Master "show all" toggle: drives every overlay component for the selected
+	// track on/off at once, and reflects whether they are all currently on.
+	void syncRenderAll();
 	void setSwatchColor(const QColor &color);
 	// Decorates a decoded value with its raw source integer in parentheses,
 	// e.g. "258.7° (47000)". When raw is NAN the value is returned unchanged.
@@ -83,6 +86,7 @@ private:
 	QTableWidget *_targetsTable;
 	QTableWidget *_beaconTable;
 	QHash<int, QCheckBox*> _overlayChecks;
+	QCheckBox *_renderAllCheck;
 	QToolButton *_colorButton;
 	QColor _swatchColor;
 	std::function<bool(int, int)> _overlayStateProvider;
