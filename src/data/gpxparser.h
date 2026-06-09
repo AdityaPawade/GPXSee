@@ -33,6 +33,10 @@ private:
 	void waypointData(Waypoint &waypoint, SegmentData *autoRoute = 0);
 	void address(Waypoint &waypoint);
 	qreal number();
+	// Reads the element's scaled text value and, into raw, the integer value of
+	// its optional raw="N" attribute (base-0: accepts 0x.. hex or decimal);
+	// raw is left as NAN when the attribute is absent/unparsable.
+	qreal numberRaw(qreal &raw);
 	QDateTime time();
 	Coordinates coordinates();
 	Link link();

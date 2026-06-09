@@ -4,7 +4,11 @@
 #include <cmath>
 
 /* Per-point telemetry carried on each track/path point. Populated from optional
-   GPX telemetry extensions on each <trkpt>. NAN / -1 = absent. */
+   GPX telemetry extensions on each <trkpt>. NAN / -1 = absent.
+
+   Scalar tags additionally carry a raw="N" attribute = the integer source value
+   before scaling; it is parsed into the matching ...Raw companion below (NAN =
+   absent). For auto_slats the raw is a hex byte stored in autoSlatsRaw. */
 struct Telemetry
 {
 	Telemetry()
@@ -18,7 +22,12 @@ struct Telemetry
 	    trackRange(NAN), contactBearing(NAN), contactRange(NAN),
 	    contactAltitude(NAN), beaconBearing(NAN), beaconBearingRel(NAN),
 	    beaconRange(NAN), event(NAN), gear(-1), wow(-1), wowRaw(-1),
-	    autoSlats(-1) {}
+	    autoSlats(-1), autoSlatsRaw(-1),
+	    rollRaw(NAN), pitchRaw(NAN), yawRaw(NAN), airspeedRawVal(NAN),
+	    vspeedRaw(NAN), rollRateRaw(NAN), yawRateRaw(NAN), navBearingRaw(NAN),
+	    trackBearingRaw(NAN), trackRangeRaw(NAN), contactBearingRaw(NAN),
+	    contactRangeRaw(NAN), contactAltitudeRaw(NAN), beaconBearingRaw(NAN),
+	    beaconBearingRelRaw(NAN), beaconRangeRaw(NAN) {}
 
 	bool isValid() const
 	{
@@ -42,7 +51,15 @@ struct Telemetry
 	qreal contactBearing, contactRange, contactAltitude;
 	qreal beaconBearing, beaconBearingRel, beaconRange;
 	qreal event;
-	int gear, wow, wowRaw, autoSlats;
+	int gear, wow, wowRaw, autoSlats, autoSlatsRaw;
+
+	/* Raw (pre-scaling) source integers from the raw="N" attributes; NAN =
+	   the attribute was absent. Shown in parentheses in the telemetry panel. */
+	qreal rollRaw, pitchRaw, yawRaw, airspeedRawVal, vspeedRaw;
+	qreal rollRateRaw, yawRateRaw, navBearingRaw;
+	qreal trackBearingRaw, trackRangeRaw, contactBearingRaw, contactRangeRaw;
+	qreal contactAltitudeRaw, beaconBearingRaw, beaconBearingRelRaw,
+	  beaconRangeRaw;
 };
 
 #endif // TELEMETRY_H

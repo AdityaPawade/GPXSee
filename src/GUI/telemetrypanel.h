@@ -11,6 +11,7 @@
 class QCheckBox;
 class QComboBox;
 class QTableWidget;
+class QToolButton;
 class CollapsibleSection;
 
 class TelemetryPanel : public QScrollArea
@@ -28,6 +29,9 @@ public:
 	// Provider answers "does the selected track expose capability C anywhere?"
 	// Section visibility is decided from this (whole-track), not the cursor sample.
 	void setCapabilityProvider(const std::function<bool(int, int)> &provider);
+	// Provider returns the current colour of a given track; used to initialise
+	// the per-track colour swatch in the Flight section.
+	void setTrackColorProvider(const std::function<QColor(int)> &provider);
 
 public slots:
 	void updateTelemetry(const QString &name, const Coordinates &pos,
@@ -35,10 +39,13 @@ public slots:
 	void clear();
 	void setFlights(const QStringList &names);
 	void reloadOverlayState();
+	// Refresh the colour swatch from the current track's colour provider.
+	void reloadTrackColor();
 
 signals:
 	void flightChanged(int index);
 	void overlayToggled(int trackId, int overlayType, bool on);
+	void trackColorChanged(int trackId, const QColor &color);
 
 private:
 	QTableWidget *createTable(const QStringList &keys) const;
@@ -53,6 +60,12 @@ private:
 	void updateSection(CollapsibleSection *section, QTableWidget *table,
 	  const QStringList &values, const QList<QColor> &colors, bool visible);
 	void applyCapabilities();
+	void pickTrackColor();
+	void setSwatchColor(const QColor &color);
+	// Decorates a decoded value with its raw source integer in parentheses,
+	// e.g. "258.7° (47000)". When raw is NAN the value is returned unchanged.
+	QString withRaw(const QString &value, qreal raw) const;
+	QString withRawHex(const QString &value, int raw) const;
 
 	QComboBox *_flightCombo;
 	CollapsibleSection *_flightSection;
@@ -70,8 +83,11 @@ private:
 	QTableWidget *_targetsTable;
 	QTableWidget *_beaconTable;
 	QHash<int, QCheckBox*> _overlayChecks;
+	QToolButton *_colorButton;
+	QColor _swatchColor;
 	std::function<bool(int, int)> _overlayStateProvider;
 	std::function<bool(int, int)> _capabilityProvider;
+	std::function<QColor(int)> _trackColorProvider;
 };
 
 #endif // TELEMETRYPANEL_H

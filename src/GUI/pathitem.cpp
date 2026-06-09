@@ -196,6 +196,23 @@ void PathItem::updateColor()
 	update();
 }
 
+void PathItem::setTrackColor(const QColor &color)
+{
+	// Polyline + ticks.
+	setColor(color);
+	// Cursor marker (kept in the track colour; see heading marker).
+	setMarkerColor(color);
+	// Every graph item belonging to this path (elevation/speed/...).
+	for (int i = 0; i < _graphs.size(); i++) {
+		GraphItem *graph = _graphs.at(i);
+		if (!graph)
+			continue;
+		graph->setColor(color);
+		if (graph->secondaryGraph())
+			graph->secondaryGraph()->setColor(color);
+	}
+}
+
 qreal PathItem::width() const
 {
 	return (_useStyle && _path.style().width() > 0)
@@ -411,6 +428,9 @@ void PathItem::setMarkerPosition(qreal pos)
 		setMarkerInfo(pos);
 
 		const PathPoint *mp = pointAtDistance(distance);
+		// Orient the platform marker to the current heading (yaw); absent yaw
+		// falls back to the plain marker.
+		_marker->setHeading(mp ? mp->telemetry().yaw : NAN);
 		if (mp && mp->telemetry().isValid())
 			emit markerTelemetry(_name, mp->coordinates(), mp->telemetry());
 
@@ -449,6 +469,7 @@ void PathItem::setMarkerTime(const QDateTime &time)
 				_marker->setVisible(_showMarker);
 				_marker->setPos(pp);
 				setMarkerInfo(_markerDistance);
+				_marker->setHeading(seg->at(mid).telemetry().yaw);
 				if (seg->at(mid).telemetry().isValid())
 					emit markerTelemetry(_name, seg->at(mid).coordinates(),
 					  seg->at(mid).telemetry());
@@ -478,6 +499,7 @@ void PathItem::setMarkerTime(const QDateTime &time)
 		setMarkerInfo(_markerDistance);
 
 		const PathPoint &tp = (f < 0.5) ? seg->at(i1) : seg->at(i2);
+		_marker->setHeading(tp.telemetry().yaw);
 		if (tp.telemetry().isValid())
 			emit markerTelemetry(_name, tp.coordinates(), tp.telemetry());
 	} else

@@ -41,6 +41,9 @@ public:
 	void setGraph(int index);
 
 	void setColor(const QColor &color);
+	// Apply a per-track colour override to the polyline, ticks, marker and all
+	// of this path's graph items at once (used by the panel colour picker).
+	void setTrackColor(const QColor &color);
 	void setWidth(qreal width);
 	void setPenStyle(Qt::PenStyle style);
 	void setDigitalZoom(int zoom);

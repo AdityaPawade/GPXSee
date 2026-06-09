@@ -1,3 +1,4 @@
+#include <cmath>
 #include <QSet>
 #include <QGraphicsScene>
 #include <QEvent>
@@ -545,6 +546,26 @@ void GraphView::setSliderPosition(qreal pos)
 		return;
 
 	_sliderPos = pos;
+	updateSliderPosition();
+}
+
+qreal GraphView::sliderTime() const
+{
+	if (_graphs.isEmpty())
+		return NAN;
+	if (_graphType == Time)
+		return _sliderPos;
+	// Distance axis: map distance -> time via the (cardinal) reference graph.
+	return _graphs.first()->timeAtDistance(_sliderPos);
+}
+
+void GraphView::setSliderTime(qreal time)
+{
+	if (_graphs.isEmpty() || std::isnan(time))
+		return;
+
+	_sliderPos = (_graphType == Time)
+	  ? time : _graphs.first()->distanceAtTime(time);
 	updateSliderPosition();
 }
 

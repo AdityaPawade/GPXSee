@@ -66,29 +66,30 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	_contact = QPointF();
 
 	// Continuous radar state: a raw search-mode field can read OFF while locked,
-	// so use radarState + effective azimuth (lock azimuth in LOCK, search azimuth
-	// otherwise) so the overlay tracks the target during a lock instead of
-	// pointing at the stale search azimuth.
+	// so use radarState + the effective antenna azimuth. The azimuth is present
+	// only while the antenna is pointed at a tracked target (LOCK); in SEARCH/OFF
+	// it is absent. The FOV wedge and look-ray are anchored on that azimuth, so
+	// they are drawn ONLY when it is present (never at a stale/north default).
 	bool haveState = !std::isnan(t.radarState);
 	bool radarOn = haveState ? ((int)(t.radarState + 0.5) >= 1)
 	  : cfg.radarOn(t.radarMode);
 	double azimuth = !std::isnan(t.radarAz) ? t.radarAz : t.lookAzimuth;
+	bool haveAzimuth = !std::isnan(azimuth);
 	double scan = std::isnan(t.radarScan) ? cfg.scanDefaultDeg : t.radarScan;
-	double scanCenter = std::isnan(azimuth) ? t.yaw : azimuth;
 	if ((_components & Fov) && cfg.showScanWedge && radarOn && scan > 0
-	  && !std::isnan(scanCenter)) {
+	  && haveAzimuth) {
 		double half = scan / 2.0;
 		_cone << QPointF(0, 0);
 		const int steps = 12;
 		for (int i = 0; i <= steps; i++) {
-			double a = scanCenter - half + (scan * i / steps);
+			double a = azimuth - half + (scan * i / steps);
 			QPointF p(_map->ll2xy(destination(pos, a, cfg.fovRangeMeters)));
 			_cone << (p - apex);
 		}
 		_cone << QPointF(0, 0);
 	}
 
-	_color = cfg.radarModeColor(_mode);
+	_color = _trackColor.isValid() ? _trackColor : cfg.radarModeColor(_mode);
 
 	if ((_components & LookRay) && cfg.showLookRay && !std::isnan(azimuth)) {
 		_lookRay = _map->ll2xy(destination(pos, azimuth,
@@ -144,8 +145,9 @@ void RadarOverlayItem::paint(QPainter *painter,
 	}
 
 	const VizConfig &cfg = VizConfig::instance();
+	QColor lookColor(_trackColor.isValid() ? _trackColor : cfg.lookRayColor);
 	if (_hasLookRay) {
-		painter->setPen(QPen(cfg.lookRayColor, cfg.lookRayWidthPx, Qt::DashLine));
+		painter->setPen(QPen(lookColor, cfg.lookRayWidthPx, Qt::DashLine));
 		painter->drawLine(QPointF(0, 0), _lookRay);
 	}
 

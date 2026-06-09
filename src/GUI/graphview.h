@@ -46,6 +46,13 @@ public:
 	void setSliderColor(const QColor &color);
 
 	qreal sliderPosition() const {return _sliderPos;}
+	// Current slider position expressed as time (seconds) from the start of the
+	// graph, regardless of whether the X axis is distance or time. NAN if the
+	// graph has no data / no time information.
+	qreal sliderTime() const;
+	// Move the slider to the given time (seconds from graph start). Distance-axis
+	// graphs convert via the cardinal graph's time<->distance mapping.
+	void setSliderTime(qreal time);
 
 signals:
 	void sliderPositionChanged(qreal);

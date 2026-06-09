@@ -1,8 +1,12 @@
 #include <QCheckBox>
 #include <QComboBox>
+#include <QColorDialog>
 #include <QHeaderView>
+#include <QIcon>
+#include <QPixmap>
 #include <QSignalBlocker>
 #include <QTableWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <cmath>
 #include "collapsiblesection.h"
@@ -24,6 +28,7 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	  this, [this](int index) {
 		emit flightChanged(index);
 		reloadOverlayState();
+		reloadTrackColor();
 		applyCapabilities();
 	});
 	layout->addWidget(_flightCombo);
@@ -64,6 +69,18 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	addOverlay(_targetsSection, "targets", MapView::Contacts);
 	addOverlay(_beaconSection, "beacon", MapView::Beacon);
 
+	// Per-track colour picker in the Flight section header. Opens QColorDialog
+	// and recolours the selected track's polyline, graphs and overlays.
+	_colorButton = new QToolButton(_flightSection);
+	_colorButton->setToolTip(cfg.fieldLabel("track_color"));
+	_colorButton->setAutoRaise(true);
+	_colorButton->setFocusPolicy(Qt::NoFocus);
+	_swatchColor = QColor();
+	setSwatchColor(QColor());
+	_flightSection->addHeaderWidget(_colorButton);
+	connect(_colorButton, &QToolButton::clicked, this,
+	  &TelemetryPanel::pickTrackColor);
+
 	layout->addWidget(_flightSection);
 	layout->addWidget(_attitudeSection);
 	layout->addWidget(_engineSection);
@@ -91,6 +108,51 @@ void TelemetryPanel::setCapabilityProvider(
 {
 	_capabilityProvider = provider;
 	applyCapabilities();
+}
+
+void TelemetryPanel::setTrackColorProvider(
+  const std::function<QColor(int)> &provider)
+{
+	_trackColorProvider = provider;
+	reloadTrackColor();
+}
+
+void TelemetryPanel::setSwatchColor(const QColor &color)
+{
+	_swatchColor = color;
+
+	// Draw a small filled swatch as the button icon (framed when no colour yet).
+	QPixmap pm(16, 16);
+	pm.fill(color.isValid() ? color : QColor(Qt::transparent));
+	if (color.isValid()) {
+		_colorButton->setEnabled(true);
+	} else
+		_colorButton->setEnabled(false);
+	_colorButton->setIcon(QIcon(pm));
+}
+
+void TelemetryPanel::reloadTrackColor()
+{
+	int idx = _flightCombo->currentIndex();
+	QColor c = (_trackColorProvider && idx >= 0)
+	  ? _trackColorProvider(idx) : QColor();
+	setSwatchColor(c);
+}
+
+void TelemetryPanel::pickTrackColor()
+{
+	int idx = _flightCombo->currentIndex();
+	if (idx < 0)
+		return;
+
+	QColor initial(_swatchColor.isValid() ? _swatchColor : Qt::white);
+	QColor chosen(QColorDialog::getColor(initial, this,
+	  VizConfig::instance().fieldLabel("track_color")));
+	if (!chosen.isValid())
+		return;
+
+	setSwatchColor(chosen);
+	emit trackColorChanged(idx, chosen);
 }
 
 void TelemetryPanel::applyCapabilities()
@@ -196,6 +258,23 @@ QString TelemetryPanel::boolStr(int v, const QString &on,
 	return (v < 0) ? VizConfig::instance().missingValueLabel : (v ? on : off);
 }
 
+QString TelemetryPanel::withRaw(const QString &value, qreal raw) const
+{
+	if (std::isnan(raw) || value == VizConfig::instance().missingValueLabel)
+		return value;
+	// Raw source integers are whole numbers; show without a fractional part.
+	return QString("%1 (%2)").arg(value,
+	  QString::number((qlonglong)llround(raw)));
+}
+
+QString TelemetryPanel::withRawHex(const QString &value, int raw) const
+{
+	if (raw < 0 || value == VizConfig::instance().missingValueLabel)
+		return value;
+	return QString("%1 (0x%2)").arg(value,
+	  QString::number(raw, 16).toUpper());
+}
+
 void TelemetryPanel::updateSection(CollapsibleSection *section,
   QTableWidget *table, const QStringList &values, const QList<QColor> &colors,
   bool visible)
@@ -215,36 +294,47 @@ void TelemetryPanel::updateTelemetry(const QString &name,
   const Coordinates &pos, const Telemetry &t)
 {
 	const VizConfig &cfg = VizConfig::instance();
+	// Every decoded value in the PANEL is shown with its raw source integer in
+	// parentheses (withRaw / withRawHex); absent raw -> value shown unchanged.
+	// Map overlays are deliberately left untouched (no parentheses on the map).
 	bool haveFlight = pos.isValid() || !std::isnan(t.airspeed)
 	  || !std::isnan(t.airspeedKt) || !std::isnan(t.vspeed);
 	updateSection(_flightSection, _flightTable, QStringList()
 	  << (name.isEmpty() ? cfg.missingValueLabel : name)
 	  << (pos.isValid() ? QString("%1, %2").arg(pos.lat(), 0, 'f', 5)
 		.arg(pos.lon(), 0, 'f', 5) : cfg.missingValueLabel)
-	  << (std::isnan(t.airspeedKt) ? num(t.airspeed, 0, "km/h")
-		: num(t.airspeedKt, 0, "kt"))
-	  << num(t.vspeed, 1, "m/s"), QList<QColor>(), haveFlight);
+	  << withRaw(std::isnan(t.airspeedKt) ? num(t.airspeed, 0, "km/h")
+		: num(t.airspeedKt, 0, "kt"), t.airspeedRawVal)
+	  << withRaw(num(t.vspeed, 1, "m/s"), t.vspeedRaw),
+	  QList<QColor>(), haveFlight);
 
 	bool haveAttitude = !std::isnan(t.yaw) || !std::isnan(t.pitch)
 	  || !std::isnan(t.roll) || !std::isnan(t.rollRate)
 	  || !std::isnan(t.yawRate);
 	updateSection(_attitudeSection, _attitudeTable, QStringList()
-	  << num(t.yaw, 1, "deg") << num(t.pitch, 1, "deg")
-	  << num(t.roll, 1, "deg") << num(t.rollRate, 1, "deg/s")
-	  << num(t.yawRate, 1, "deg/s"), QList<QColor>(), haveAttitude);
+	  << withRaw(num(t.yaw, 1, "deg"), t.yawRaw)
+	  << withRaw(num(t.pitch, 1, "deg"), t.pitchRaw)
+	  << withRaw(num(t.roll, 1, "deg"), t.rollRaw)
+	  << withRaw(num(t.rollRate, 1, "deg/s"), t.rollRateRaw)
+	  << withRaw(num(t.yawRate, 1, "deg/s"), t.yawRateRaw),
+	  QList<QColor>(), haveAttitude);
 
 	bool haveEngine = !std::isnan(t.fuelKg) || !std::isnan(t.fuelPct);
 	updateSection(_engineSection, _engineTable, QStringList()
 	  << (std::isnan(t.fuelKg) ? num(t.fuelPct, 1, "%")
-		: num(t.fuelKg, 0, "kg")), QList<QColor>(), haveEngine);
+		: withRaw(num(t.fuelKg, 0, "kg"), t.fuelRaw)),
+	  QList<QColor>(), haveEngine);
 
 	bool eventActive = !std::isnan(t.event) && t.event >= cfg.eventActiveThreshold;
 	bool haveDiscretes = t.gear >= 0 || t.wow >= 0 || t.autoSlats >= 0
 	  || !std::isnan(t.event);
+	// Gear and WOW both derive from the same wow_raw source byte; auto-slats from
+	// its own raw byte. Discrete states are shown with their source byte in hex.
 	updateSection(_discretesSection, _discretesTable, QStringList()
-	  << boolStr(t.gear, cfg.gearDownLabel, cfg.gearUpLabel)
-	  << boolStr(t.wow, cfg.wowGroundLabel, cfg.wowAirLabel)
-	  << boolStr(t.autoSlats, cfg.slatsOutLabel, cfg.slatsInLabel)
+	  << withRawHex(boolStr(t.gear, cfg.gearDownLabel, cfg.gearUpLabel), t.wowRaw)
+	  << withRawHex(boolStr(t.wow, cfg.wowGroundLabel, cfg.wowAirLabel), t.wowRaw)
+	  << withRawHex(boolStr(t.autoSlats, cfg.slatsOutLabel, cfg.slatsInLabel),
+		t.autoSlatsRaw)
 	  << (eventActive ? cfg.eventActiveLabel : cfg.eventIdleLabel),
 	  QList<QColor>() << QColor() << QColor() << QColor()
 	  << (eventActive ? cfg.eventActiveColor : QColor()), haveDiscretes);
@@ -257,9 +347,10 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 	bool haveRadar = !std::isnan(t.radarState) || !std::isnan(t.radarMode)
 	  || !std::isnan(t.radarScan) || !std::isnan(t.radarScanProgram)
 	  || !std::isnan(t.lookAzimuth) || !std::isnan(t.radarAz);
+	// Mode shows the state/mode NAME with the raw mode byte (e.g. "SEARCH (68)").
 	updateSection(_radarSection, _radarTable, QStringList()
-	  << (haveState ? cfg.radarStateName(t.radarState)
-		: cfg.radarModeName(t.radarMode))
+	  << withRaw(haveState ? cfg.radarStateName(t.radarState)
+		: cfg.radarModeName(t.radarMode), t.radarMode)
 	  << (lockNoScan ? cfg.lockScanLabel
 		: std::isnan(t.radarScan) ? cfg.missingValueLabel
 		: QString("%1 deg").arg(t.radarScan, 0, 'f', 0))
@@ -275,12 +366,17 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 	bool hasTrack = !std::isnan(t.trackBearing) && !std::isnan(t.trackRange);
 	bool hasContact = !std::isnan(t.contactBearing) && !std::isnan(t.contactRange);
 	updateSection(_targetsSection, _targetsTable, QStringList()
-	  << (hasTrack ? bearingPair(t.trackBearing, trackAbs) : cfg.missingValueLabel)
-	  << (hasTrack ? rangeKm(t.trackRange) : cfg.missingValueLabel)
+	  << (hasTrack ? withRaw(bearingPair(t.trackBearing, trackAbs),
+		t.trackBearingRaw) : cfg.missingValueLabel)
+	  << (hasTrack ? withRaw(rangeKm(t.trackRange), t.trackRangeRaw)
+		: cfg.missingValueLabel)
 	  << (hasTrack ? num(trackAbs, 1, "deg") : cfg.missingValueLabel)
-	  << (hasContact ? bearingPair(t.contactBearing, contactAbs) : cfg.missingValueLabel)
-	  << (hasContact ? rangeKm(t.contactRange) : cfg.missingValueLabel)
-	  << (hasContact ? num(t.contactAltitude, 0, "m") : cfg.missingValueLabel),
+	  << (hasContact ? withRaw(bearingPair(t.contactBearing, contactAbs),
+		t.contactBearingRaw) : cfg.missingValueLabel)
+	  << (hasContact ? withRaw(rangeKm(t.contactRange), t.contactRangeRaw)
+		: cfg.missingValueLabel)
+	  << (hasContact ? withRaw(num(t.contactAltitude, 0, "m"),
+		t.contactAltitudeRaw) : cfg.missingValueLabel),
 	  QList<QColor>() << (hasTrack ? cfg.trackColor : QColor())
 	  << (hasTrack ? cfg.trackColor : QColor())
 	  << (hasTrack ? cfg.trackColor : QColor())
@@ -291,10 +387,10 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 	bool haveBeacon = !std::isnan(t.beaconBearing) || !std::isnan(t.beaconBearingRel)
 	  || !std::isnan(t.beaconRange);
 	updateSection(_beaconSection, _beaconTable, QStringList()
-	  << num(t.beaconBearing, 1, "deg")
-	  << num(t.beaconBearingRel, 1, "deg")
-	  << (std::isnan(t.beaconRange) ? cfg.missingValueLabel
-		: QString::number(t.beaconRange, 'f', 1) + " km"),
+	  << withRaw(num(t.beaconBearing, 1, "deg"), t.beaconBearingRaw)
+	  << withRaw(num(t.beaconBearingRel, 1, "deg"), t.beaconBearingRelRaw)
+	  << withRaw(std::isnan(t.beaconRange) ? cfg.missingValueLabel
+		: QString::number(t.beaconRange, 'f', 1) + " km", t.beaconRangeRaw),
 	  QList<QColor>() << cfg.beaconColor << cfg.beaconColor << cfg.beaconColor,
 	  haveBeacon);
 }
@@ -324,6 +420,7 @@ void TelemetryPanel::setFlights(const QStringList &names)
 		_flightCombo->setCurrentIndex(0);
 	_flightCombo->setVisible(names.size() > 1);
 	reloadOverlayState();
+	reloadTrackColor();
 	applyCapabilities();
 }
 

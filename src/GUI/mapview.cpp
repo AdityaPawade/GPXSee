@@ -202,7 +202,9 @@ PathItem *MapView::addTrack(const Track &track)
 	ti->setPenStyle(_trackStyle);
 	ti->setVisible(_showTracks);
 	ti->setDigitalZoom(_digitalZoom);
-	ti->setMarkerColor(_markerColor);
+	// Heading marker is drawn in the track colour (per track), not the global
+	// marker colour, so multiple tracks remain visually distinct.
+	ti->setMarkerColor(ti->color());
 	ti->setMarkerBackgroundColor(_backgroundColor);
 	ti->drawMarkerBackground(_infoBackground);
 	ti->showMarker(_showMarkers);
@@ -865,6 +867,7 @@ void MapView::clear()
 	_waypoints.clear();
 	_enabledOverlays.clear();
 	_markerSamples.clear();
+	_trackColors.clear();
 	_activeTrack = 0;
 	_playbackStart = QDateTime();
 	_playbackEnd = QDateTime();
@@ -1442,8 +1445,11 @@ void MapView::setMarkerColor(const QColor &color)
 {
 	_markerColor = color;
 
+	// Track heading markers are kept in each track's own colour (per track), so
+	// the global marker colour applies to routes only and tracks re-assert their
+	// own colour. (A per-track override, if any, takes precedence.)
 	for (int i = 0; i < _tracks.size(); i++)
-		_tracks.at(i)->setMarkerColor(color);
+		_tracks.at(i)->setMarkerColor(trackColor(i));
 	for (int i = 0; i < _routes.size(); i++)
 		_routes.at(i)->setMarkerColor(color);
 }
@@ -1706,9 +1712,11 @@ void MapView::refreshOverlays()
 			_scene->addItem(item);
 		}
 
+		QColor tc(_trackColors.value(trackId, QColor()));
 		if (type == Beacon) {
 			BeaconOverlayItem *beacon = static_cast<BeaconOverlayItem*>(item);
 			beacon->setMap(_map);
+			beacon->setTrackColor(tc);
 			if (valid)
 				beacon->setData(pos, telemetry);
 			else
@@ -1716,6 +1724,7 @@ void MapView::refreshOverlays()
 		} else {
 			RadarOverlayItem *radar = static_cast<RadarOverlayItem*>(item);
 			radar->setMap(_map);
+			radar->setTrackColor(tc);
 			if (valid)
 				radar->setData(pos, telemetry);
 			else
@@ -1752,6 +1761,34 @@ qint64 MapView::trackPlaybackOffset(int index) const
 {
 	return (index >= 0 && index < _trackPlaybackOffsets.size())
 	  ? _trackPlaybackOffsets.at(index) : 0;
+}
+
+QDateTime MapView::activeTrackStartTime() const
+{
+	if (_activeTrack < 0 || _activeTrack >= _tracks.size())
+		return QDateTime();
+	return _tracks.at(_activeTrack)->timeRange().first;
+}
+
+QColor MapView::trackColor(int index) const
+{
+	if (index < 0 || index >= _tracks.size())
+		return QColor();
+	if (_trackColors.contains(index))
+		return _trackColors.value(index);
+	return _tracks.at(index)->color();
+}
+
+void MapView::setTrackColor(int index, const QColor &color)
+{
+	if (index < 0 || index >= _tracks.size() || !color.isValid())
+		return;
+
+	_trackColors.insert(index, color);
+	// Polyline + ticks + marker + this track's graph items.
+	_tracks.at(index)->setTrackColor(color);
+	// Map overlays (radar wedge/look-ray, beacon) belonging to this track.
+	refreshOverlays();
 }
 
 void MapView::setTrackPlaybackOffset(int index, qint64 offsetMs)

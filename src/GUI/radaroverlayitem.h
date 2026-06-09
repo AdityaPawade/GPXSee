@@ -27,6 +27,9 @@ public:
 
 	void setMap(Map *map) {_map = map;}
 	void setComponents(int components) {_components = components;}
+	// Optional per-track tint; invalid colour = fall back to the configured
+	// radar/look-ray colours.
+	void setTrackColor(const QColor &color) {_trackColor = color;}
 	void setData(const Coordinates &pos, const Telemetry &t);
 	void clear();
 
@@ -46,6 +49,7 @@ private:
 	QPointF _track;      // local
 	QPointF _contact;    // local
 	QColor _color;
+	QColor _trackColor;  // optional per-track tint (invalid = use cfg colours)
 	QRectF _bound;
 };
 

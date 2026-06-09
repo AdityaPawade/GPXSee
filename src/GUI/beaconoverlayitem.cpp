@@ -69,13 +69,14 @@ void BeaconOverlayItem::paint(QPainter *painter,
 		return;
 
 	const VizConfig &cfg = VizConfig::instance();
+	QColor color(_trackColor.isValid() ? _trackColor : cfg.beaconColor);
 	painter->setRenderHint(QPainter::Antialiasing, true);
-	painter->setPen(QPen(cfg.beaconColor, 2.0, Qt::DashDotLine));
+	painter->setPen(QPen(color, 2.0, Qt::DashDotLine));
 	painter->setBrush(Qt::NoBrush);
 	painter->drawLine(QPointF(0, 0), _end);
 
-	painter->setPen(QPen(cfg.beaconColor, 2.0));
-	painter->setBrush(QBrush(cfg.beaconColor));
+	painter->setPen(QPen(color, 2.0));
+	painter->setBrush(QBrush(color));
 	painter->drawEllipse(_end, 5.0, 5.0);
 	painter->drawLine(_end + QPointF(-9, 0), _end + QPointF(9, 0));
 	painter->drawLine(_end + QPointF(0, -9), _end + QPointF(0, 9));

@@ -36,7 +36,9 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QGeoPositionInfoSource>
+#include <QSignalBlocker>
 #include <limits>
+#include <cmath>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 #include <QPermissions>
 #endif // QT 6.5
@@ -148,6 +150,11 @@ GUI::GUI(const QString &lang)
 	  &MapView::setActiveTrack);
 	connect(_telemetryPanel, &TelemetryPanel::overlayToggled, _mapView,
 	  &MapView::setOverlayEnabled);
+	_telemetryPanel->setTrackColorProvider([this](int trackId) -> QColor {
+		return _mapView->trackColor(trackId);
+	});
+	connect(_telemetryPanel, &TelemetryPanel::trackColorChanged, _mapView,
+	  &MapView::setTrackColor);
 	connect(_mapView, &MapView::tracksChanged, this, [this]() {
 		_telemetryPanel->setFlights(_mapView->trackNames());
 	});
@@ -166,6 +173,7 @@ GUI::GUI(const QString &lang)
 	_lastTab = 0;
 	_playbackDurationMs = 0;
 	_playbackScrubbing = false;
+	_syncingSlider = false;
 
 	readSettings(activeMap, disabledPOIs, recentFiles);
 
@@ -1046,9 +1054,14 @@ void GUI::createGraphTabs()
 	_tabs.append(new TemperatureGraph(_graphTabWidget));
 	_tabs.append(new GearRatioGraph(_graphTabWidget));
 
-	for (int i = 0; i < _tabs.size(); i++)
+	for (int i = 0; i < _tabs.size(); i++) {
 		connect(_tabs.at(i), &GraphTab::sliderPositionChanged, _mapView,
 		  &MapView::setMarkerPosition);
+		// Bidirectional sync: a graph-cursor move also drives the playback
+		// timeline (and thus the playback position). Guarded against loops.
+		connect(_tabs.at(i), &GraphTab::sliderPositionChanged, this,
+		  &GUI::graphSliderMoved);
+	}
 }
 
 void GUI::createStatusBar()
@@ -1187,7 +1200,64 @@ void GUI::setPlaybackTime(const QDateTime &time)
 	_playbackScrubbing = false;
 
 	_mapView->setPlaybackTime(_playbackTime);
+	// Keep the graph cursor in lock-step with the playback timeline (guarded so
+	// the graph's own sliderPositionChanged does not bounce back here).
+	if (!_syncingSlider)
+		syncGraphCursorToTime(_playbackTime);
 	updatePlaybackControls();
+}
+
+void GUI::syncGraphCursorToTime(const QDateTime &time)
+{
+	GraphTab *gt = static_cast<GraphTab*>(_graphTabWidget->currentWidget());
+	if (!gt || gt->isEmpty() || !time.isValid())
+		return;
+
+	QDateTime start(_mapView->activeTrackStartTime());
+	if (!start.isValid())
+		return;
+
+	// Graph X is time-from-track-start; the playback timeline is absolute time
+	// shifted by the active track's playback offset.
+	qint64 offset = _mapView->trackPlaybackOffset(_mapView->activeTrack());
+	qreal seconds = (start.addMSecs(offset)).msecsTo(time) / 1000.0;
+
+	// Block the tab's signals so moving its slider programmatically does not
+	// re-emit sliderPositionChanged (which would flip the map marker back to
+	// distance mode and re-drive playback). The map marker is already placed by
+	// setPlaybackTime() in the time domain.
+	_syncingSlider = true;
+	QSignalBlocker blocker(gt);
+	gt->setSliderTime(seconds);
+	_syncingSlider = false;
+}
+
+void GUI::graphSliderMoved(qreal pos)
+{
+	Q_UNUSED(pos);
+	if (_syncingSlider || _playbackDurationMs <= 0)
+		return;
+
+	GraphTab *gt = static_cast<GraphTab*>(_graphTabWidget->currentWidget());
+	if (!gt || gt->isEmpty())
+		return;
+
+	QDateTime start(_mapView->activeTrackStartTime());
+	if (!start.isValid())
+		return;
+
+	qreal seconds = gt->sliderTime();
+	if (std::isnan(seconds))
+		return;
+
+	qint64 offset = _mapView->trackPlaybackOffset(_mapView->activeTrack());
+	QDateTime target(start.addMSecs(offset + (qint64)(seconds * 1000.0)));
+
+	// Move the playback position/timeline to the graph cursor's time. Guard so
+	// setPlaybackTime() does not re-drive the graph cursor (loop).
+	_syncingSlider = true;
+	setPlaybackTime(target);
+	_syncingSlider = false;
 }
 
 void GUI::updatePlaybackControls()

@@ -13,6 +13,28 @@ qreal GPXParser::number()
 	return ret;
 }
 
+qreal GPXParser::numberRaw(qreal &raw)
+{
+	// Capture the raw="N" attribute BEFORE readElementText() consumes the
+	// element. base-0 auto-detects 0x.. hex (e.g. auto_slats) or decimal.
+	QString rawAttr(_reader.attributes().value("raw").toString());
+	raw = NAN;
+	if (!rawAttr.isEmpty()) {
+		bool rok;
+		qlonglong v = rawAttr.toLongLong(&rok, 0);
+		if (rok)
+			raw = (qreal)v;
+	}
+
+	bool res;
+	qreal ret = _reader.readElementText().toDouble(&res);
+	if (!res)
+		_reader.raiseError(QString("Invalid %1").arg(
+		  _reader.name().toString()));
+
+	return ret;
+}
+
 QDateTime GPXParser::time()
 {
 	QDateTime d = QDateTime::fromString(_reader.readElementText(),
@@ -152,23 +174,32 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			trackpoint.setPower(number());
 		else if (_reader.name() == QLatin1String("TrackPointExtension"))
 			tpExtension(trackpoint);
-		// Optional per-point telemetry extensions.
+		// Optional per-point telemetry extensions. Scalar tags carry an optional
+		// raw="N" attribute (the integer source value before scaling) which is
+		// captured into the matching ...Raw companion via numberRaw().
 		else if (_reader.name() == QLatin1String("roll"))
-			trackpoint.rtelemetry().roll = number();
+			trackpoint.rtelemetry().roll
+			  = numberRaw(trackpoint.rtelemetry().rollRaw);
 		else if (_reader.name() == QLatin1String("pitch"))
-			trackpoint.rtelemetry().pitch = number();
+			trackpoint.rtelemetry().pitch
+			  = numberRaw(trackpoint.rtelemetry().pitchRaw);
 		else if (_reader.name() == QLatin1String("yaw"))
-			trackpoint.rtelemetry().yaw = number();
+			trackpoint.rtelemetry().yaw
+			  = numberRaw(trackpoint.rtelemetry().yawRaw);
 		else if (_reader.name() == QLatin1String("airspeed"))
-			trackpoint.rtelemetry().airspeed = number();
+			trackpoint.rtelemetry().airspeed
+			  = numberRaw(trackpoint.rtelemetry().airspeedRawVal);
 		else if (_reader.name() == QLatin1String("airspeed_kt"))
 			trackpoint.rtelemetry().airspeedKt = number();
 		else if (_reader.name() == QLatin1String("vspeed"))
-			trackpoint.rtelemetry().vspeed = number();
+			trackpoint.rtelemetry().vspeed
+			  = numberRaw(trackpoint.rtelemetry().vspeedRaw);
 		else if (_reader.name() == QLatin1String("roll_rate"))
-			trackpoint.rtelemetry().rollRate = number();
+			trackpoint.rtelemetry().rollRate
+			  = numberRaw(trackpoint.rtelemetry().rollRateRaw);
 		else if (_reader.name() == QLatin1String("yaw_rate"))
-			trackpoint.rtelemetry().yawRate = number();
+			trackpoint.rtelemetry().yawRate
+			  = numberRaw(trackpoint.rtelemetry().yawRateRaw);
 		else if (_reader.name() == QLatin1String("fuel_raw"))
 			trackpoint.rtelemetry().fuelRaw = number();
 		else if (_reader.name() == QLatin1String("fuel_pct"))
@@ -176,7 +207,8 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 		else if (_reader.name() == QLatin1String("fuel_kg"))
 			trackpoint.rtelemetry().fuelKg = number();
 		else if (_reader.name() == QLatin1String("nav_bearing"))
-			trackpoint.rtelemetry().navBearing = number();
+			trackpoint.rtelemetry().navBearing
+			  = numberRaw(trackpoint.rtelemetry().navBearingRaw);
 		else if (_reader.name() == QLatin1String("nav_range"))
 			trackpoint.rtelemetry().navRange = number();
 		else if (_reader.name() == QLatin1String("radar_mode"))
@@ -192,21 +224,29 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 		else if (_reader.name() == QLatin1String("radar_az"))
 			trackpoint.rtelemetry().radarAz = number();
 		else if (_reader.name() == QLatin1String("track_bearing"))
-			trackpoint.rtelemetry().trackBearing = number();
+			trackpoint.rtelemetry().trackBearing
+			  = numberRaw(trackpoint.rtelemetry().trackBearingRaw);
 		else if (_reader.name() == QLatin1String("track_range"))
-			trackpoint.rtelemetry().trackRange = number();
+			trackpoint.rtelemetry().trackRange
+			  = numberRaw(trackpoint.rtelemetry().trackRangeRaw);
 		else if (_reader.name() == QLatin1String("contact_bearing"))
-			trackpoint.rtelemetry().contactBearing = number();
+			trackpoint.rtelemetry().contactBearing
+			  = numberRaw(trackpoint.rtelemetry().contactBearingRaw);
 		else if (_reader.name() == QLatin1String("contact_range"))
-			trackpoint.rtelemetry().contactRange = number();
+			trackpoint.rtelemetry().contactRange
+			  = numberRaw(trackpoint.rtelemetry().contactRangeRaw);
 		else if (_reader.name() == QLatin1String("contact_alt"))
-			trackpoint.rtelemetry().contactAltitude = number();
+			trackpoint.rtelemetry().contactAltitude
+			  = numberRaw(trackpoint.rtelemetry().contactAltitudeRaw);
 		else if (_reader.name() == QLatin1String("beacon_bearing"))
-			trackpoint.rtelemetry().beaconBearing = number();
+			trackpoint.rtelemetry().beaconBearing
+			  = numberRaw(trackpoint.rtelemetry().beaconBearingRaw);
 		else if (_reader.name() == QLatin1String("beacon_bearing_rel"))
-			trackpoint.rtelemetry().beaconBearingRel = number();
+			trackpoint.rtelemetry().beaconBearingRel
+			  = numberRaw(trackpoint.rtelemetry().beaconBearingRelRaw);
 		else if (_reader.name() == QLatin1String("beacon_range"))
-			trackpoint.rtelemetry().beaconRange = number();
+			trackpoint.rtelemetry().beaconRange
+			  = numberRaw(trackpoint.rtelemetry().beaconRangeRaw);
 		else if (_reader.name() == QLatin1String("event"))
 			trackpoint.rtelemetry().event = number();
 		else if (_reader.name() == QLatin1String("gear"))
@@ -217,9 +257,14 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			// written as a hex string (e.g. "0x3F"); parse base-0 (auto-detects
 			// 0x, else decimal) and tolerate junk instead of failing the file.
 			trackpoint.rtelemetry().wowRaw = _reader.readElementText().toInt(nullptr, 0);
-		else if (_reader.name() == QLatin1String("auto_slats"))
-			trackpoint.rtelemetry().autoSlats = (int)number();
-		else
+		else if (_reader.name() == QLatin1String("auto_slats")) {
+			// auto_slats carries a hex raw byte (e.g. 0x08); keep both the
+			// discrete (text) and the raw byte for the panel.
+			qreal slatsRaw;
+			trackpoint.rtelemetry().autoSlats = (int)numberRaw(slatsRaw);
+			trackpoint.rtelemetry().autoSlatsRaw = std::isnan(slatsRaw)
+			  ? -1 : (int)slatsRaw;
+		} else
 			_reader.skipCurrentElement();
 	}
 }

@@ -95,9 +95,9 @@ void VizConfig::loadDefaults()
 	contactMarkerRadiusPx = 6.0;
 	targetLineWidthPx = 1.0;
 
-	gearDownLabel = "DOWN";  gearUpLabel = "up";
-	wowGroundLabel = "ON GROUND"; wowAirLabel = "airborne";
-	slatsOutLabel = "OUT";   slatsInLabel = "in";
+	gearDownLabel = "DOWN";  gearUpLabel = "UP";
+	wowGroundLabel = "ON GROUND"; wowAirLabel = "AIRBORNE";
+	slatsOutLabel = "OUT";   slatsInLabel = "IN";
 	missingValueLabel = "-";
 
 	panelTitles.clear();
@@ -117,6 +117,7 @@ void VizConfig::loadDefaults()
 	fieldLabels.insert("parameter", "Parameter");
 	fieldLabels.insert("value", "Value");
 	fieldLabels.insert("track_name", "Track");
+	fieldLabels.insert("track_color", "Track color");
 	fieldLabels.insert("position", "Position");
 	fieldLabels.insert("yaw", "Heading");
 	fieldLabels.insert("pitch", "Pitch");

@@ -127,6 +127,12 @@ public:
 	int activeTrack() const {return _activeTrack;}
 	int trackCount() const {return _tracks.size();}
 	qint64 trackPlaybackOffset(int index) const;
+	// Start timestamp (no playback offset applied) of the active track; used to
+	// bridge the graph's time-from-start axis to absolute playback time.
+	QDateTime activeTrackStartTime() const;
+	// Per-track colour override (polyline + marker + graphs + overlays). Returns
+	// the effective colour of the track (override if set, else its palette colour).
+	QColor trackColor(int index) const;
 	QDateTime playbackStart() const {return _playbackStart;}
 	QDateTime playbackEnd() const {return _playbackEnd;}
 	bool overlayEnabled(int trackId, int type) const;
@@ -163,6 +169,7 @@ public slots:
 	void setTrackPlaybackOffset(int index, qint64 offsetMs);
 	void resetTrackPlaybackOffsets();
 	void setActiveTrack(int index);
+	void setTrackColor(int index, const QColor &color);
 	void setOverlayEnabled(int trackId, int type, bool on);
 	TelemetryCaps trackCapabilities(int trackId) const;
 	void followPosition(bool follow);
@@ -251,6 +258,7 @@ private:
 	QHash<int, QSet<int> > _enabledOverlays;
 	QHash<QPair<int, int>, QGraphicsItem*> _overlayItems;
 	QHash<int, TrackSample> _markerSamples;
+	QHash<int, QColor> _trackColors;   // per-track colour overrides
 	int _activeTrack;               // which track drives the dock + overlay
 	qreal _markerPos;               // last graph-slider position (for re-trigger)
 	QList<TrackItem*> _tracks;

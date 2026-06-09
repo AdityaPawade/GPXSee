@@ -150,6 +150,8 @@ private slots:
 	void scrubPlayback(int value);
 	void speedChanged(int index);
 	void showPlaybackSync();
+	// Graph cursor moved by the user -> drive playback position/time.
+	void graphSliderMoved(qreal pos);
 
 #ifdef Q_OS_ANDROID
 	void menu(const QPoint &pos);
@@ -196,6 +198,8 @@ private:
 	void updateStatusBarInfo();
 	void updatePlaybackControls();
 	void setPlaybackTime(const QDateTime &time);
+	// Move the current graph tab's cursor to the given absolute playback time.
+	void syncGraphCursorToTime(const QDateTime &time);
 	QString playbackSpan(qint64 ms) const;
 	void updateWindowTitle();
 	bool updateGraphTabs();
@@ -374,6 +378,9 @@ private:
 	QDateTime _playbackStart, _playbackEnd, _playbackTime;
 	qint64 _playbackDurationMs;
 	bool _playbackScrubbing;
+	// Re-entrancy guard so the playback-slider <-> graph-cursor sync does not
+	// bounce updates back and forth between the two controls.
+	bool _syncingSlider;
 	QList<GraphTab*> _tabs;
 	GraphTab *_lastTab;
 
