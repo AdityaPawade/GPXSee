@@ -201,6 +201,12 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			trackpoint.rtelemetry().contactRange = number();
 		else if (_reader.name() == QLatin1String("contact_alt"))
 			trackpoint.rtelemetry().contactAltitude = number();
+		else if (_reader.name() == QLatin1String("beacon_bearing"))
+			trackpoint.rtelemetry().beaconBearing = number();
+		else if (_reader.name() == QLatin1String("beacon_bearing_rel"))
+			trackpoint.rtelemetry().beaconBearingRel = number();
+		else if (_reader.name() == QLatin1String("beacon_range"))
+			trackpoint.rtelemetry().beaconRange = number();
 		else if (_reader.name() == QLatin1String("event"))
 			trackpoint.rtelemetry().event = number();
 		else if (_reader.name() == QLatin1String("gear"))

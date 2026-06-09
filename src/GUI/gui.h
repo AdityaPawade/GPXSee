@@ -36,8 +36,7 @@ class QPermission;
 class FileBrowser;
 class GraphTab;
 class MapView;
-class LiveStatsWidget;
-class SensorTargetsWidget;
+class TelemetryPanel;
 class Map;
 class POI;
 class QScreen;
@@ -361,9 +360,7 @@ private:
 
 	QSplitter *_splitter;
 	MapView *_mapView;
-	LiveStatsWidget *_liveStats;
-	SensorTargetsWidget *_sensorStats;
-	SensorTargetsWidget *_targetStats;
+	TelemetryPanel *_telemetryPanel;
 	QTabWidget *_graphTabWidget;
 	QDockWidget *_playbackDock;
 	QPushButton *_playbackButton;

@@ -16,7 +16,8 @@ struct Telemetry
 	    radarState(NAN), radarAz(NAN), radarLockMode(NAN), radarLockWidth(NAN),
 	    trackBearing(NAN),
 	    trackRange(NAN), contactBearing(NAN), contactRange(NAN),
-	    contactAltitude(NAN), event(NAN), gear(-1), wow(-1), wowRaw(-1),
+	    contactAltitude(NAN), beaconBearing(NAN), beaconBearingRel(NAN),
+	    beaconRange(NAN), event(NAN), gear(-1), wow(-1), wowRaw(-1),
 	    autoSlats(-1) {}
 
 	bool isValid() const
@@ -24,7 +25,8 @@ struct Telemetry
 		return !std::isnan(yaw) || !std::isnan(roll) || !std::isnan(radarMode)
 		  || !std::isnan(radarState)
 		  || !std::isnan(lookAzimuth) || !std::isnan(trackRange)
-		  || !std::isnan(contactRange) || gear >= 0 || wow >= 0;
+		  || !std::isnan(contactRange) || !std::isnan(beaconRange)
+		  || gear >= 0 || wow >= 0;
 	}
 
 	qreal roll, pitch, yaw, airspeed, airspeedKt, vspeed;
@@ -38,6 +40,7 @@ struct Telemetry
 	qreal radarState, radarAz, radarLockMode, radarLockWidth;
 	qreal trackBearing, trackRange;
 	qreal contactBearing, contactRange, contactAltitude;
+	qreal beaconBearing, beaconBearingRel, beaconRange;
 	qreal event;
 	int gear, wow, wowRaw, autoSlats;
 };

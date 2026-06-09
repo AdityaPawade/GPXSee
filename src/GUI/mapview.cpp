@@ -19,6 +19,7 @@
 #include "areaitem.h"
 #include "scaleitem.h"
 #include "coordinatesitem.h"
+#include "beaconoverlayitem.h"
 #include "radaroverlayitem.h"
 #include "mapitem.h"
 #include "keys.h"
@@ -62,12 +63,6 @@ MapView::MapView(Map *map, POI *poi, QWidget *parent)
 	_cursorCoordinates->setZValue(2.0);
 	_cursorCoordinates->setVisible(false);
 	_scene->addItem(_cursorCoordinates);
-
-	// radar FOV + target overlay, driven by the cursor telemetry.
-	_radarOverlay = new RadarOverlayItem();
-	_radarOverlay->setMap(_map);
-	_scene->addItem(_radarOverlay);
-	connect(this, &MapView::markerTelemetry, this, &MapView::updateRadarOverlay);
 
 	_playbackClock = new QLabel(this);
 	_playbackClock->setAlignment(Qt::AlignCenter);
@@ -446,7 +441,7 @@ void MapView::rescale()
 
 	updatePOIVisibility();
 
-	refreshRadarOverlay();
+	refreshOverlays();
 }
 
 void MapView::setPalette(const Palette &palette)
@@ -868,6 +863,8 @@ void MapView::clear()
 	_routes.clear();
 	_areas.clear();
 	_waypoints.clear();
+	_enabledOverlays.clear();
+	_markerSamples.clear();
 	_activeTrack = 0;
 	_playbackStart = QDateTime();
 	_playbackEnd = QDateTime();
@@ -883,8 +880,11 @@ void MapView::clear()
 	_scene->removeItem(_crosshair);
 	_scene->removeItem(_motionInfo);
 	_scene->removeItem(_legend);
-	_scene->removeItem(_radarOverlay);
+	for (QHash<QPair<int, int>, QGraphicsItem*>::const_iterator it =
+	  _overlayItems.constBegin(); it != _overlayItems.constEnd(); ++it)
+		_scene->removeItem(it.value());
 	_scene->clear();
+	_overlayItems.clear();
 	_scene->addItem(_mapScale);
 	_scene->addItem(_cursorCoordinates);
 	_scene->addItem(_positionCoordinates);
@@ -892,8 +892,6 @@ void MapView::clear()
 	_scene->addItem(_motionInfo);
 	_legend->clear();
 	_scene->addItem(_legend);
-	_radarOverlay->clear();
-	_scene->addItem(_radarOverlay);
 
 	_palette.reset();
 
@@ -1455,14 +1453,12 @@ void MapView::setMarkerPosition(qreal pos)
 	_markerPos = pos;
 	_playbackMarkerValid = false;
 	_playbackClock->setVisible(false);
-	// clear the radar overlay first; tracks with telemetry re-set it
-	// synchronously via the markerTelemetry signal during the loop below.
-	if (_radarOverlay)
-		_radarOverlay->clear();
+	_markerSamples.clear();
 	for (int i = 0; i < _tracks.size(); i++)
 		_tracks.at(i)->setMarkerPosition(pos);
 	for (int i = 0; i < _routes.size(); i++)
 		_routes.at(i)->setMarkerPosition(pos);
+	refreshOverlays();
 }
 
 void MapView::setPlaybackTime(const QDateTime &time)
@@ -1471,10 +1467,9 @@ void MapView::setPlaybackTime(const QDateTime &time)
 	_playbackMarkerValid = time.isValid();
 	updatePlaybackClock();
 
-	if (_radarOverlay)
-		_radarOverlay->clear();
 	for (int i = 0; i < _tracks.size(); i++)
 		_tracks.at(i)->setMarkerTime(time.addMSecs(-trackPlaybackOffset(i)));
+	refreshOverlays();
 }
 
 void MapView::updatePlaybackRange()
@@ -1539,35 +1534,204 @@ void MapView::updatePlaybackClock()
 	positionPlaybackClock();
 }
 
-void MapView::updateRadarOverlay(const QString &name, const Coordinates &pos,
-  const Telemetry &t)
+bool MapView::overlayEnabled(int trackId, int type) const
 {
-	Q_UNUSED(name);
-	_radarPos = pos;
-	_radarTelemetry = t;
-	if (_radarOverlay) {
-		_radarOverlay->setMap(_map);
-		_radarOverlay->setData(pos, t);
-	}
+	return _enabledOverlays.value(trackId).contains(type);
 }
 
-void MapView::refreshRadarOverlay()
+void MapView::setOverlayEnabled(int trackId, int type, bool on)
 {
-	// Re-project the radar/target overlay after a map zoom or rescale: the
-	// aircraft lat/lon is zoom-invariant, only the pixel mapping changes, so
-	// the wedge/target must be recomputed at the new scale.
-	if (_radarOverlay && _radarOverlay->isVisible()) {
-		_radarOverlay->setMap(_map);
-		_radarOverlay->setData(_radarPos, _radarTelemetry);
+	if (trackId < 0 || trackId >= _tracks.size())
+		return;
+
+	if (on)
+		_enabledOverlays[trackId].insert(type);
+	else {
+		_enabledOverlays[trackId].remove(type);
+		if (_enabledOverlays.value(trackId).isEmpty())
+			_enabledOverlays.remove(trackId);
+	}
+	refreshOverlays();
+}
+
+bool MapView::sampleTrackAtTime(int trackId, const QDateTime &time,
+  Coordinates *pos, Telemetry *telemetry) const
+{
+	if (trackId < 0 || trackId >= _tracks.size() || !time.isValid())
+		return false;
+
+	QDateTime localTime(time.addMSecs(-trackPlaybackOffset(trackId)));
+	const Path &path = _tracks.at(trackId)->path();
+	for (int s = 0; s < path.size(); s++) {
+		const PathSegment &seg = path.at(s);
+		if (seg.size() < 1 || !seg.first().hasTimestamp()
+		  || !seg.last().hasTimestamp() || localTime < seg.first().timestamp()
+		  || localTime > seg.last().timestamp())
+			continue;
+
+		int low = 0, high = seg.count() - 1, mid = 0;
+		while (low <= high) {
+			mid = low + ((high - low) / 2);
+			const QDateTime &val = seg.at(mid).timestamp();
+			if (val > localTime)
+				high = mid - 1;
+			else if (val < localTime)
+				low = mid + 1;
+			else {
+				if (pos)
+					*pos = seg.at(mid).coordinates();
+				if (telemetry)
+					*telemetry = seg.at(mid).telemetry();
+				return seg.at(mid).telemetry().isValid();
+			}
+		}
+
+		int i1 = qMax(0, high);
+		int i2 = qMin(seg.count() - 1, low);
+		if (i1 == i2 || !seg.at(i1).hasTimestamp()
+		  || !seg.at(i2).hasTimestamp()) {
+			if (pos)
+				*pos = seg.at(i1).coordinates();
+			if (telemetry)
+				*telemetry = seg.at(i1).telemetry();
+			return seg.at(i1).telemetry().isValid();
+		}
+
+		qint64 span = seg.at(i1).timestamp().msecsTo(seg.at(i2).timestamp());
+		qreal f = span > 0 ? seg.at(i1).timestamp().msecsTo(localTime)
+		  / (qreal)span : 0;
+		const Coordinates &c1 = seg.at(i1).coordinates();
+		const Coordinates &c2 = seg.at(i2).coordinates();
+		if (pos)
+			*pos = Coordinates(c1.lon() + (c2.lon() - c1.lon()) * f,
+			  c1.lat() + (c2.lat() - c1.lat()) * f);
+		const PathPoint &tp = (f < 0.5) ? seg.at(i1) : seg.at(i2);
+		if (telemetry)
+			*telemetry = tp.telemetry();
+		return tp.telemetry().isValid();
+	}
+
+	return false;
+}
+
+MapView::TelemetryCaps MapView::trackCapabilities(int trackId) const
+{
+	TelemetryCaps caps;
+	if (trackId < 0 || trackId >= _tracks.size())
+		return caps;
+
+	const Path &path = _tracks.at(trackId)->path();
+	for (int s = 0; s < path.size(); s++) {
+		const PathSegment &seg = path.at(s);
+		for (int i = 0; i < seg.count(); i++) {
+			const Telemetry &t = seg.at(i).telemetry();
+			if (!qIsNaN(t.yaw) || !qIsNaN(t.pitch) || !qIsNaN(t.roll)
+			  || !qIsNaN(t.rollRate) || !qIsNaN(t.yawRate) || !qIsNaN(t.vspeed))
+				caps.attitude = true;
+			if (!qIsNaN(t.fuelKg) || !qIsNaN(t.fuelPct) || !qIsNaN(t.fuelRaw))
+				caps.engineFuel = true;
+			if (t.gear >= 0 || t.wow >= 0 || t.autoSlats >= 0 || !qIsNaN(t.event))
+				caps.discretes = true;
+			if (!qIsNaN(t.radarState) || !qIsNaN(t.radarMode)
+			  || !qIsNaN(t.radarScan) || !qIsNaN(t.radarScanProgram)
+			  || !qIsNaN(t.lookAzimuth) || !qIsNaN(t.radarAz))
+				caps.radar = true;
+			if (!qIsNaN(t.trackBearing) || !qIsNaN(t.trackRange)
+			  || !qIsNaN(t.contactBearing) || !qIsNaN(t.contactRange))
+				caps.targets = true;
+			if (!qIsNaN(t.beaconRange) || !qIsNaN(t.beaconBearing))
+				caps.beacon = true;
+			if (caps.attitude && caps.engineFuel && caps.discretes && caps.radar
+			  && caps.targets && caps.beacon)
+				return caps;
+		}
+	}
+	return caps;
+}
+
+void MapView::refreshOverlays()
+{
+	QSet<QPair<int, int> > wanted;
+	for (QHash<int, QSet<int> >::const_iterator it = _enabledOverlays.constBegin();
+	  it != _enabledOverlays.constEnd(); ++it) {
+		for (QSet<int>::const_iterator ti = it.value().constBegin();
+		  ti != it.value().constEnd(); ++ti)
+			wanted.insert(qMakePair(it.key(), *ti));
+	}
+
+	QList<QPair<int, int> > remove;
+	for (QHash<QPair<int, int>, QGraphicsItem*>::const_iterator it =
+	  _overlayItems.constBegin(); it != _overlayItems.constEnd(); ++it) {
+		if (!wanted.contains(it.key()))
+			remove.append(it.key());
+	}
+	for (int i = 0; i < remove.size(); i++) {
+		QGraphicsItem *item = _overlayItems.take(remove.at(i));
+		_scene->removeItem(item);
+		delete item;
+	}
+
+	for (QSet<QPair<int, int> >::const_iterator it = wanted.constBegin();
+	  it != wanted.constEnd(); ++it) {
+		int trackId = it->first;
+		int type = it->second;
+		Coordinates pos;
+		Telemetry telemetry;
+		bool valid = false;
+
+		if (_playbackMarkerValid)
+			valid = sampleTrackAtTime(trackId, _playbackTime, &pos, &telemetry);
+		else if (_markerSamples.contains(trackId)) {
+			TrackSample sample = _markerSamples.value(trackId);
+			pos = sample.pos;
+			telemetry = sample.telemetry;
+			valid = telemetry.isValid();
+		}
+
+		QGraphicsItem *item = _overlayItems.value(*it, 0);
+		if (!item) {
+			if (type == Beacon)
+				item = new BeaconOverlayItem();
+			else {
+				RadarOverlayItem *radar = new RadarOverlayItem();
+				if (type == RadarFov)
+					radar->setComponents(RadarOverlayItem::Fov);
+				else if (type == LookRay)
+					radar->setComponents(RadarOverlayItem::LookRay);
+				else
+					radar->setComponents(RadarOverlayItem::Contacts);
+				item = radar;
+			}
+			_overlayItems.insert(*it, item);
+			_scene->addItem(item);
+		}
+
+		if (type == Beacon) {
+			BeaconOverlayItem *beacon = static_cast<BeaconOverlayItem*>(item);
+			beacon->setMap(_map);
+			if (valid)
+				beacon->setData(pos, telemetry);
+			else
+				beacon->clear();
+		} else {
+			RadarOverlayItem *radar = static_cast<RadarOverlayItem*>(item);
+			radar->setMap(_map);
+			if (valid)
+				radar->setData(pos, telemetry);
+			else
+				radar->clear();
+		}
 	}
 }
 
 void MapView::onMarkerTelemetry(const QString &name, const Coordinates &pos,
   const Telemetry &t)
 {
-	// Only the active flight drives the Live Stats dock + radar/target overlay;
-	// with multiple tracks loaded, the others' marker telemetry is ignored.
 	int idx = _tracks.indexOf(static_cast<TrackItem*>(sender()));
+	if (idx >= 0)
+		_markerSamples.insert(idx, TrackSample{pos, t});
+
+	// Only the active flight drives the telemetry dock.
 	if (idx < 0 || _tracks.size() <= 1 || idx == _activeTrack)
 		emit markerTelemetry(name, pos, t);
 }

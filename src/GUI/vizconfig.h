@@ -51,6 +51,7 @@ public:
 	QColor lookRayColor;
 	double lookRayWidthPx;
 	QColor trackColor, contactColor;
+	QColor beaconColor;
 	double trackMarkerRadiusPx, contactMarkerRadiusPx;
 	double targetLineWidthPx;
 

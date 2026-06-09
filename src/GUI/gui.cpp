@@ -63,8 +63,7 @@
 #include "gearratiograph.h"
 #include <QDockWidget>
 #include "mapview.h"
-#include "livestatswidget.h"
-#include "sensortargetswidget.h"
+#include "telemetrypanel.h"
 #include "vizconfig.h"
 #include "trackinfo.h"
 #include "filebrowser.h"
@@ -122,37 +121,35 @@ GUI::GUI(const QString &lang)
 	setAcceptDrops(true);
 
 	const VizConfig &viz = VizConfig::instance();
-	_liveStats = new LiveStatsWidget();
-	QDockWidget *statsDock = new QDockWidget(viz.panelTitle("live_stats"), this);
-	statsDock->setObjectName(QString("LiveStatsDock"));
-	statsDock->setWidget(_liveStats);
-	statsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-	addDockWidget(Qt::RightDockWidgetArea, statsDock);
-	connect(_mapView, &MapView::markerTelemetry, _liveStats,
-	  &LiveStatsWidget::updateTelemetry);
-
-	_sensorStats = new SensorTargetsWidget(SensorTargetsWidget::SensorMode);
-	QDockWidget *sensorDock = new QDockWidget(viz.panelTitle("sensor"), this);
-	sensorDock->setObjectName(QString("SensorDock"));
-	sensorDock->setWidget(_sensorStats);
-	sensorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-	addDockWidget(Qt::RightDockWidgetArea, sensorDock);
-	connect(_mapView, &MapView::markerTelemetry, _sensorStats,
-	  &SensorTargetsWidget::updateTelemetry);
-
-	_targetStats = new SensorTargetsWidget(SensorTargetsWidget::TargetsMode);
-	QDockWidget *targetsDock = new QDockWidget(viz.panelTitle("targets"), this);
-	targetsDock->setObjectName(QString("TargetsDock"));
-	targetsDock->setWidget(_targetStats);
-	targetsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-	addDockWidget(Qt::RightDockWidgetArea, targetsDock);
-	connect(_mapView, &MapView::markerTelemetry, _targetStats,
-	  &SensorTargetsWidget::updateTelemetry);
-
-	connect(_liveStats, &LiveStatsWidget::flightChanged, _mapView,
+	_telemetryPanel = new TelemetryPanel();
+	_telemetryPanel->setOverlayStateProvider([this](int trackId, int type) {
+		return _mapView->overlayEnabled(trackId, type);
+	});
+	_telemetryPanel->setCapabilityProvider([this](int trackId, int cap) -> bool {
+		MapView::TelemetryCaps c = _mapView->trackCapabilities(trackId);
+		switch (cap) {
+			case TelemetryPanel::CapAttitude:  return c.attitude;
+			case TelemetryPanel::CapEngine:    return c.engineFuel;
+			case TelemetryPanel::CapDiscretes: return c.discretes;
+			case TelemetryPanel::CapRadar:     return c.radar;
+			case TelemetryPanel::CapTargets:   return c.targets;
+			case TelemetryPanel::CapBeacon:    return c.beacon;
+		}
+		return false;
+	});
+	QDockWidget *telemetryDock = new QDockWidget(viz.panelTitle("telemetry"), this);
+	telemetryDock->setObjectName(QString("TelemetryDock"));
+	telemetryDock->setWidget(_telemetryPanel);
+	telemetryDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	addDockWidget(Qt::RightDockWidgetArea, telemetryDock);
+	connect(_mapView, &MapView::markerTelemetry, _telemetryPanel,
+	  &TelemetryPanel::updateTelemetry);
+	connect(_telemetryPanel, &TelemetryPanel::flightChanged, _mapView,
 	  &MapView::setActiveTrack);
+	connect(_telemetryPanel, &TelemetryPanel::overlayToggled, _mapView,
+	  &MapView::setOverlayEnabled);
 	connect(_mapView, &MapView::tracksChanged, this, [this]() {
-		_liveStats->setFlights(_mapView->trackNames());
+		_telemetryPanel->setFlights(_mapView->trackNames());
 	});
 	connect(_mapView, &MapView::playbackRangeChanged, this,
 	  &GUI::playbackRangeChanged);

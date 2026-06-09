@@ -4,6 +4,7 @@
 #include <QGraphicsView>
 #include <QVector>
 #include <QHash>
+#include <QSet>
 #include <QList>
 #include <QFlags>
 #include <QDateTime>
@@ -35,6 +36,7 @@ class WaypointItem;
 class ScaleItem;
 class CoordinatesItem;
 class RadarOverlayItem;
+class BeaconOverlayItem;
 class PathItem;
 class GraphItem;
 class PlaneItem;
@@ -57,6 +59,19 @@ public:
 		NoFlags = 0,
 		HiRes = 1,
 		Expand = 2
+	};
+	enum OverlayType {
+		RadarFov,
+		LookRay,
+		Contacts,
+		Beacon
+	};
+	// Which telemetry groups a track exposes ANYWHERE along its length. Used to
+	// decide, once per track, which panel sections to show persistently.
+	struct TelemetryCaps {
+		bool attitude, engineFuel, discretes, radar, targets, beacon;
+		TelemetryCaps() : attitude(false), engineFuel(false), discretes(false),
+		  radar(false), targets(false), beacon(false) {}
 	};
 	Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -114,6 +129,7 @@ public:
 	qint64 trackPlaybackOffset(int index) const;
 	QDateTime playbackStart() const {return _playbackStart;}
 	QDateTime playbackEnd() const {return _playbackEnd;}
+	bool overlayEnabled(int trackId, int type) const;
 	void setPlaybackClockFormat(const QString &format);
 	void setPlaybackClockStyle(const QString &style);
 	void showPlaybackClock(bool show);
@@ -147,6 +163,8 @@ public slots:
 	void setTrackPlaybackOffset(int index, qint64 offsetMs);
 	void resetTrackPlaybackOffsets();
 	void setActiveTrack(int index);
+	void setOverlayEnabled(int trackId, int type, bool on);
+	TelemetryCaps trackCapabilities(int trackId) const;
 	void followPosition(bool follow);
 	void showMotionInfo(bool show);
 	void showLegend(bool show);
@@ -164,13 +182,13 @@ private slots:
 	void updatePOI();
 	void reloadMap();
 	void updatePosition(const QGeoPositionInfo &pos);
-	void updateRadarOverlay(const QString &name, const Coordinates &pos,
-	  const Telemetry &telemetry);
 	void onMarkerTelemetry(const QString &name, const Coordinates &pos,
 	  const Telemetry &telemetry);
 
 private:
-	void refreshRadarOverlay();
+	bool sampleTrackAtTime(int trackId, const QDateTime &time,
+	  Coordinates *pos, Telemetry *telemetry) const;
+	void refreshOverlays();
 	void updatePlaybackRange();
 	void updatePlaybackClock();
 	void positionPlaybackClock();
@@ -221,14 +239,18 @@ private:
 	CrosshairItem *_crosshair;
 	MotionInfoItem *_motionInfo;
 	LegendItem *_legend;
-	RadarOverlayItem *_radarOverlay;
 	QLabel *_playbackClock;
 	QString _playbackClockFormat;
 	QDateTime _playbackStart, _playbackEnd, _playbackTime;
 	QVector<qint64> _trackPlaybackOffsets;
 	bool _playbackMarkerValid;
-	Coordinates _radarPos;          // cached marker position (zoom-invariant)
-	Telemetry _radarTelemetry;      // cached marker telemetry, for re-projection
+	struct TrackSample {
+		Coordinates pos;
+		Telemetry telemetry;
+	};
+	QHash<int, QSet<int> > _enabledOverlays;
+	QHash<QPair<int, int>, QGraphicsItem*> _overlayItems;
+	QHash<int, TrackSample> _markerSamples;
 	int _activeTrack;               // which track drives the dock + overlay
 	qreal _markerPos;               // last graph-slider position (for re-trigger)
 	QList<TrackItem*> _tracks;

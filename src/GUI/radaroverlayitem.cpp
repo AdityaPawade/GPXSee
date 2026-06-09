@@ -11,7 +11,7 @@
 
 RadarOverlayItem::RadarOverlayItem(QGraphicsItem *parent)
   : QGraphicsItem(parent), _map(0), _active(false), _hasLookRay(false),
-    _hasTrack(false), _hasContact(false), _mode(0)
+    _hasTrack(false), _hasContact(false), _components(All), _mode(0)
 {
 	setZValue(Z_VALUE);
 	setVisible(false);
@@ -75,7 +75,8 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	double azimuth = !std::isnan(t.radarAz) ? t.radarAz : t.lookAzimuth;
 	double scan = std::isnan(t.radarScan) ? cfg.scanDefaultDeg : t.radarScan;
 	double scanCenter = std::isnan(azimuth) ? t.yaw : azimuth;
-	if (cfg.showScanWedge && radarOn && scan > 0 && !std::isnan(scanCenter)) {
+	if ((_components & Fov) && cfg.showScanWedge && radarOn && scan > 0
+	  && !std::isnan(scanCenter)) {
 		double half = scan / 2.0;
 		_cone << QPointF(0, 0);
 		const int steps = 12;
@@ -89,20 +90,22 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 
 	_color = cfg.radarModeColor(_mode);
 
-	if (cfg.showLookRay && !std::isnan(azimuth)) {
+	if ((_components & LookRay) && cfg.showLookRay && !std::isnan(azimuth)) {
 		_lookRay = _map->ll2xy(destination(pos, azimuth,
 		  cfg.fovRangeMeters * 0.75)) - apex;
 		_hasLookRay = true;
 	}
 
-	if (cfg.showTrack && !std::isnan(t.yaw) && !std::isnan(t.trackBearing)
+	if ((_components & Contacts) && cfg.showTrack && !std::isnan(t.yaw)
+	  && !std::isnan(t.trackBearing)
 	  && !std::isnan(t.trackRange) && t.trackRange > 0) {
 		Coordinates c(destination(pos, t.yaw + t.trackBearing, t.trackRange));
 		_track = _map->ll2xy(c) - apex;
 		_hasTrack = true;
 	}
 
-	if (cfg.showContact && !std::isnan(t.yaw) && !std::isnan(t.contactBearing)
+	if ((_components & Contacts) && cfg.showContact && !std::isnan(t.yaw)
+	  && !std::isnan(t.contactBearing)
 	  && !std::isnan(t.contactRange) && t.contactRange > 0) {
 		Coordinates c(destination(pos, t.yaw + t.contactBearing, t.contactRange));
 		_contact = _map->ll2xy(c) - apex;
@@ -118,8 +121,8 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		b |= QRectF(_contact - QPointF(16, 16), QSizeF(32, 32));
 	_bound = b.adjusted(-4, -4, 4, 4);
 
-	_active = true;
-	setVisible(true);
+	_active = _cone.size() > 2 || _hasLookRay || _hasTrack || _hasContact;
+	setVisible(_active);
 	update();
 }
 

@@ -12,6 +12,13 @@ class Map;
 class RadarOverlayItem : public QGraphicsItem
 {
 public:
+	enum Component {
+		Fov = 0x1,
+		LookRay = 0x2,
+		Contacts = 0x4,
+		All = Fov | LookRay | Contacts
+	};
+
 	RadarOverlayItem(QGraphicsItem *parent = 0);
 
 	QRectF boundingRect() const {return _bound;}
@@ -19,6 +26,7 @@ public:
 	  QWidget *widget);
 
 	void setMap(Map *map) {_map = map;}
+	void setComponents(int components) {_components = components;}
 	void setData(const Coordinates &pos, const Telemetry &t);
 	void clear();
 
@@ -31,6 +39,7 @@ private:
 	bool _hasLookRay;
 	bool _hasTrack;
 	bool _hasContact;
+	int _components;
 	int _mode;
 	QPolygonF _cone;     // local coords relative to apex (this item's pos)
 	QPointF _lookRay;    // local

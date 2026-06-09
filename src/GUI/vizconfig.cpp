@@ -90,6 +90,7 @@ void VizConfig::loadDefaults()
 	lookRayWidthPx = 2.0;
 	trackColor = QColor(255, 170, 0);
 	contactColor = QColor(230, 30, 30);
+	beaconColor = QColor(30, 170, 120);
 	trackMarkerRadiusPx = 7.0;
 	contactMarkerRadiusPx = 6.0;
 	targetLineWidthPx = 1.0;
@@ -100,6 +101,14 @@ void VizConfig::loadDefaults()
 	missingValueLabel = "-";
 
 	panelTitles.clear();
+	panelTitles.insert("telemetry", "Telemetry");
+	panelTitles.insert("flight", "Flight");
+	panelTitles.insert("attitude", "Attitude");
+	panelTitles.insert("engine_fuel", "Engine/Fuel");
+	panelTitles.insert("discretes", "Discretes");
+	panelTitles.insert("radar", "Radar");
+	panelTitles.insert("targets_contacts", "Targets/Contacts");
+	panelTitles.insert("nav_beacon", "Nav Beacon");
 	panelTitles.insert("live_stats", "Live Stats");
 	panelTitles.insert("sensor", "Sensor");
 	panelTitles.insert("targets", "Targets");
@@ -134,6 +143,13 @@ void VizConfig::loadDefaults()
 	fieldLabels.insert("wow", "Weight-on-wheels");
 	fieldLabels.insert("auto_slats", "Auto-slats");
 	fieldLabels.insert("event", "Event");
+	fieldLabels.insert("radar_fov", "Radar FOV");
+	fieldLabels.insert("look_ray", "Look ray");
+	fieldLabels.insert("targets", "Targets");
+	fieldLabels.insert("beacon", "Beacon");
+	fieldLabels.insert("beacon_bearing", "Beacon bearing");
+	fieldLabels.insert("beacon_bearing_rel", "Beacon bearing rel");
+	fieldLabels.insert("beacon_range", "Beacon range");
 
 	referenceYear = 2026;
 	playbackSpeeds = QList<int>() << 1 << 2 << 8 << 16 << 32;
@@ -224,6 +240,7 @@ void VizConfig::loadFile(const QString &path)
 			else if (key == "look_ray_width_px") lookRayWidthPx = val.toDouble();
 			else if (key == "track_color") trackColor = parseColor(val, trackColor);
 			else if (key == "contact_color") contactColor = parseColor(val, contactColor);
+			else if (key == "beacon_color") beaconColor = parseColor(val, beaconColor);
 			else if (key == "track_radius_px") trackMarkerRadiusPx = val.toDouble();
 			else if (key == "contact_radius_px") contactMarkerRadiusPx = val.toDouble();
 			else if (key == "target_line_width_px") targetLineWidthPx = val.toDouble();
