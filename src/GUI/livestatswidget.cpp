@@ -8,10 +8,11 @@
 #include "vizconfig.h"
 
 static const char *ROW_KEYS[] = {
-	"track_name", "position", "yaw", "pitch", "roll", "airspeed",
-	"vspeed", "roll_rate", "yaw_rate", "sensor_mode", "scan_width",
+	"track_name", "position", "yaw", "pitch", "roll", "ground_speed",
+	"vspeed", "roll_rate", "yaw_rate", "sensor_mode", "scan_mode",
+	"search_az", "lock_az",
 	"contact_bearing", "contact_range", "nav_bearing", "nav_range", "fuel",
-	"gear", "wow", "auto_slats", "event"
+	"gear", "wow", "auto_slats"
 };
 
 LiveStatsWidget::LiveStatsWidget(QWidget *parent) : QWidget(parent)
@@ -90,28 +91,29 @@ void LiveStatsWidget::updateTelemetry(const QString &name,
 	set(RYaw, num(t.yaw, 1, "deg"));
 	set(RPitch, num(t.pitch, 1, "deg"));
 	set(RRoll, num(t.roll, 1, "deg"));
-	set(RAirspeed, std::isnan(t.airspeedKt) ? num(t.airspeed, 0, "km/h")
-	  : num(t.airspeedKt, 0, "kt"));
+	// Ground speed (recorded 0x156 channel); m/s -> km/h for display.
+	set(RGround, std::isnan(t.groundSpeed) ? cfg.missingValueLabel
+	  : num(t.groundSpeed * 3.6, 0, "km/h"));
 	set(RVspeed, num(t.vspeed, 1, "m/s"));
 	set(RRollRate, num(t.rollRate, 1, "deg/s"));
 	set(RYawRate, num(t.yawRate, 1, "deg/s"));
 
-	// Prefer the continuous radar STATE (OFF/SEARCH/LOCK) when present: a raw
-	// search-mode field can read OFF while locked, so radarState is reliable.
+	// Zhuk radar state (raw 0x145 byte: OFF/SEARCH/LOCK) coloured per [radar_states].
 	bool haveState = !std::isnan(t.radarState);
-	bool radarOn = haveState ? ((int)(t.radarState + 0.5) >= 1)
-	  : cfg.radarOn(t.radarMode);
-	set(RRadarMode, haveState ? cfg.radarStateName(t.radarState)
-	  : cfg.radarModeName(t.radarMode),
-	  radarOn ? cfg.radarActiveColor : QColor());
-	// During a lock there is no sector scan (single-target track), so show the
-	// track-gate label instead of a misleading "+-0 deg".
-	bool lockNoScan = haveState && (int)(t.radarState + 0.5) == 2
-	  && (std::isnan(t.radarScan) || t.radarScan <= 0);
-	set(RRadarScan, lockNoScan ? cfg.lockScanLabel
-	  : std::isnan(t.radarScan) ? cfg.missingValueLabel
-	  : QString("+-%1 deg (sector %2)").arg(t.radarScan / 2.0, 0, 'f', 0)
-	  .arg(t.radarScan, 0, 'f', 0));
+	int rstate = haveState ? (int)(t.radarState + 0.5) : 0;
+	bool radarOn = haveState && rstate >= 1;
+	set(RRadarState, cfg.radarStateName(t.radarState),
+	  radarOn ? cfg.radarStateColor(t.radarState) : QColor());
+	// Scan: pencil beam in lock, else a sector width from the scan-mode code.
+	double scanDeg = cfg.scanModeWidthDeg(t.radarScanMode);
+	set(RScan, rstate == 2 ? cfg.lockScanLabel
+	  : std::isnan(t.radarScanMode) ? cfg.missingValueLabel
+	  : std::isnan(scanDeg) ? QString("mode %1").arg(t.radarScanMode, 0, 'f', 0)
+	  : scanDeg <= 0 ? cfg.lockScanLabel
+	  : QString("+-%1 deg").arg(scanDeg / 2.0, 0, 'f', 0));
+	// Antenna azimuth: search sweep (rel to nose) and lock azimuth (abs).
+	set(RSearchAz, num(t.radarSearchAz, 1, "deg"));
+	set(RLockAz, num(t.radarAz, 1, "deg"));
 
 	set(RContactBrg, num(t.contactBearing, 1, "deg"));
 	set(RContactRng, std::isnan(t.contactRange) ? cfg.missingValueLabel
@@ -123,10 +125,6 @@ void LiveStatsWidget::updateTelemetry(const QString &name,
 	set(RGear, boolStr(t.gear, cfg.gearDownLabel, cfg.gearUpLabel));
 	set(RWow, boolStr(t.wow, cfg.wowGroundLabel, cfg.wowAirLabel));
 	set(RSlats, boolStr(t.autoSlats, cfg.slatsOutLabel, cfg.slatsInLabel));
-
-	bool active = !std::isnan(t.event) && t.event >= cfg.eventActiveThreshold;
-	set(REvent, active ? cfg.eventActiveLabel : cfg.eventIdleLabel,
-	  active ? cfg.eventActiveColor : QColor());
 }
 
 void LiveStatsWidget::clear()

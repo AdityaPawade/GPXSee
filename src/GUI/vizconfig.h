@@ -38,7 +38,12 @@ public:
 
 	// [radar_modes]  value -> { name, wedge colour }
 	QMap<int, RadarModeDef> radarModes;
-	QMap<int, QString> radarStates;   // continuous radar state code -> label (0/1/2)
+	QMap<int, QString> radarStates;   // radar state code -> label (0/1/2/3)
+	QMap<int, QColor>  radarStateColors;  // radar state code -> status colour
+	// [radar_scan_modes] raw scan-pattern code -> full sector width (deg).
+	// A mapped value of 0 means "pencil beam" (no wedge, ray only). Unmapped
+	// codes fall back to scanDefaultDeg. Drives the on-map FOV wedge width.
+	QMap<int, double>  radarScanModes;
 
 	// [event]
 	double  eventActiveThreshold;
@@ -81,8 +86,12 @@ public:
 	QString radarModeName(double mode) const;   // value -> display name
 	QColor  radarModeColor(int code) const;     // value -> wedge colour
 	bool    radarOn(double mode) const;
-	QString radarStateName(double state) const; // 0/1/2 -> OFF/SEARCH/LOCK
-	QString lockScanLabel;   // shown for scan-width during a lock (no sector scan)
+	QString radarStateName(double state) const; // raw byte -> 0/1/2=OFF/SEARCH/LOCK, else the number
+	QColor  radarStateColor(double state) const; // status colour for a state code
+	// Full sector width (deg) for a raw scan-mode code: >0 = sector wedge,
+	// 0 = pencil beam (ray only, no wedge), NAN = unknown (caller may default).
+	double  scanModeWidthDeg(double mode) const;
+	QString lockScanLabel;   // shown for scan-mode during a lock (no sector scan)
 	QString panelTitle(const QString &key) const;
 	QString fieldLabel(const QString &key) const;
 	QString sourcePath() const { return _sourcePath; }

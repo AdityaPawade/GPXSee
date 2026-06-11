@@ -28,10 +28,10 @@ signals:
 
 private:
 	enum Row {
-		RAircraft, RPos, RYaw, RPitch, RRoll, RAirspeed, RVspeed,
-		RRollRate, RYawRate, RRadarMode, RRadarScan, RContactBrg,
-		RContactRng, RNavBrg, RNavRng, RFuel, RGear, RWow, RSlats,
-		REvent, RowCount
+		RAircraft, RPos, RYaw, RPitch, RRoll, RGround, RVspeed,
+		RRollRate, RYawRate, RRadarState, RScan, RSearchAz, RLockAz,
+		RContactBrg, RContactRng, RNavBrg, RNavRng, RFuel, RGear, RWow,
+		RSlats, RowCount
 	};
 	void set(int row, const QString &value, const QColor &color = QColor());
 	QTableWidget *_table;

@@ -53,7 +53,6 @@ private:
 	  const QColor &color = QColor()) const;
 	QString num(qreal v, int prec, const QString &unit = QString()) const;
 	QString rangeKm(qreal meters) const;
-	QString bearingPair(qreal rel, qreal abs) const;
 	QString boolStr(int v, const QString &on, const QString &off) const;
 	QCheckBox *addOverlay(CollapsibleSection *section, const QString &key,
 	  int type);

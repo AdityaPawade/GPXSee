@@ -70,12 +70,26 @@ void VizConfig::loadDefaults()
 	radarModes.insert(72, RadarModeDef{ "Lock",           QColor(230, 30, 30) });
 	radarModes.insert(76, RadarModeDef{ "Event",          QColor(200, 0, 120) });
 
-	// Continuous radar STATE (fused so a raw mode field that reads OFF while
-	// locked still shows the true state). 0=OFF, 1=SEARCH, 2=LOCK.
+	// Radar STATE = the raw 0x145 byte (presentation labels only; a byte with
+	// no entry here is shown as its number). The decoder records 0=OFF,
+	// 1=SEARCH, 2=LOCK; override or extend these labels in viz.cfg [radar_states].
 	radarStates.clear();
 	radarStates.insert(0, "OFF");
 	radarStates.insert(1, "SEARCH");
 	radarStates.insert(2, "LOCK");
+	radarStateColors.clear();
+	radarStateColors.insert(1, QColor(40, 120, 255));   // SEARCH - blue
+	radarStateColors.insert(2, QColor(230, 30, 30));    // LOCK   - red
+
+	// Raw scan-pattern code (the recorded 0x14E byte) -> on-map FOV sector width
+	// (deg). This is a USER-DRIVEN display table, NOT a measured/derived value:
+	// the cartridge records only the code, and you choose how wide to draw each.
+	// 0 = pencil beam (look-ray only, no wedge); unmapped codes fall back to
+	// scanDefaultDeg. Edit these in viz.cfg [radar_scan_modes].
+	radarScanModes.clear();
+	radarScanModes.insert(1, 0.0);     // lock pencil beam (no wedge)
+	radarScanModes.insert(32, 60.0);   // sector scan (display width, tune to taste)
+	radarScanModes.insert(40, 84.0);   // sector scan (display width, tune to taste)
 
 	eventActiveThreshold = 1.0;
 	eventActiveColor     = QColor(200, 0, 0);
@@ -127,24 +141,27 @@ void VizConfig::loadDefaults()
 	fieldLabels.insert("vspeed", "Vert. speed");
 	fieldLabels.insert("roll_rate", "Roll rate");
 	fieldLabels.insert("yaw_rate", "Yaw rate");
-	fieldLabels.insert("sensor_mode", "Mode");
-	fieldLabels.insert("scan_width", "Scan width");
-	fieldLabels.insert("scan_program", "Scan program");
-	fieldLabels.insert("look_az", "Look azimuth");
+	fieldLabels.insert("ground_speed", "Ground speed");
+	fieldLabels.insert("sensor_mode", "Radar state");
+	fieldLabels.insert("scan_mode", "Scan");
+	fieldLabels.insert("search_az", "Search azimuth");
+	fieldLabels.insert("lock_az", "Lock azimuth");
+	fieldLabels.insert("lock_az_rel", "Lock azimuth rel");
+	fieldLabels.insert("apch_mode", "Approach mode");
+	fieldLabels.insert("apch_scan", "Approach scan");
+	fieldLabels.insert("apch_prog", "Approach prog");
 	fieldLabels.insert("contact_bearing", "Contact bearing");
 	fieldLabels.insert("contact_range", "Contact range");
 	fieldLabels.insert("contact_alt", "Contact rel altitude");
 	fieldLabels.insert("track_bearing", "Track bearing");
 	fieldLabels.insert("track_range", "Track range");
-	fieldLabels.insert("bearing_rel", "Bearing rel");
-	fieldLabels.insert("bearing_abs", "Bearing abs");
+	fieldLabels.insert("bearing_rel", "Bearing (off nose)");
 	fieldLabels.insert("nav_bearing", "Nav bearing");
 	fieldLabels.insert("nav_range", "Nav range");
 	fieldLabels.insert("fuel", "Fuel");
 	fieldLabels.insert("gear", "Gear");
 	fieldLabels.insert("wow", "Weight-on-wheels");
 	fieldLabels.insert("auto_slats", "Auto-slats");
-	fieldLabels.insert("event", "Event");
 	fieldLabels.insert("radar_fov", "Radar FOV");
 	fieldLabels.insert("look_ray", "Look ray");
 	fieldLabels.insert("targets", "Targets");
@@ -226,8 +243,19 @@ void VizConfig::loadFile(const QString &path)
 		} else if (section == "radar_states") {
 			bool ok;
 			int code = key.toInt(&ok);
+			if (!ok)
+				continue;
+			// value is  <name>  or  <name> | <R,G,B>
+			QStringList parts(val.split('|'));
+			radarStates.insert(code, parts.at(0).trimmed());
+			if (parts.size() >= 2)
+				radarStateColors.insert(code, parseColor(parts.at(1),
+				  radarStateColors.value(code)));
+		} else if (section == "radar_scan_modes") {
+			bool ok;
+			int code = key.toInt(&ok);
 			if (ok)
-				radarStates.insert(code, val.trimmed());
+				radarScanModes.insert(code, val.toDouble());
 		} else if (section == "event") {
 			if (key == "active_threshold") eventActiveThreshold = val.toDouble();
 			else if (key == "active_color") eventActiveColor = parseColor(val, eventActiveColor);
@@ -331,6 +359,23 @@ QString VizConfig::radarStateName(double state) const
 	if (radarStates.contains(v))
 		return radarStates.value(v);
 	return QString::number(v);
+}
+
+QColor VizConfig::radarStateColor(double state) const
+{
+	if (std::isnan(state))
+		return QColor();
+	return radarStateColors.value((int)(state + 0.5), QColor());
+}
+
+double VizConfig::scanModeWidthDeg(double mode) const
+{
+	if (std::isnan(mode))
+		return NAN;
+	int v = (int)(mode + 0.5);
+	if (radarScanModes.contains(v))
+		return radarScanModes.value(v);
+	return NAN;   // unknown code -> caller decides (e.g. scanDefaultDeg)
 }
 
 QString VizConfig::panelTitle(const QString &key) const

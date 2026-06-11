@@ -16,6 +16,8 @@ gpxsee
 # CMake + vcpkg build (out-of-source) and deploy output
 /build-cmake/
 /build/
+/build-ninja/
+/build-playback-ninja*/
 /deploy/
 /vcpkg_installed/
 CMakeUserPresets.json

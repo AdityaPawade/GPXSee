@@ -1636,11 +1636,12 @@ MapView::TelemetryCaps MapView::trackCapabilities(int trackId) const
 				caps.attitude = true;
 			if (!qIsNaN(t.fuelKg) || !qIsNaN(t.fuelPct) || !qIsNaN(t.fuelRaw))
 				caps.engineFuel = true;
-			if (t.gear >= 0 || t.wow >= 0 || t.autoSlats >= 0 || !qIsNaN(t.event))
+			if (t.gear >= 0 || t.wow >= 0 || t.autoSlats >= 0
+			  || !qIsNaN(t.groundSpeed) || !qIsNaN(t.apchMode))
 				caps.discretes = true;
-			if (!qIsNaN(t.radarState) || !qIsNaN(t.radarMode)
-			  || !qIsNaN(t.radarScan) || !qIsNaN(t.radarScanProgram)
-			  || !qIsNaN(t.lookAzimuth) || !qIsNaN(t.radarAz))
+			if (!qIsNaN(t.radarState) || !qIsNaN(t.radarScanMode)
+			  || !qIsNaN(t.radarSearchAz) || !qIsNaN(t.radarAz)
+			  || !qIsNaN(t.radarAzRel))
 				caps.radar = true;
 			if (!qIsNaN(t.trackBearing) || !qIsNaN(t.trackRange)
 			  || !qIsNaN(t.contactBearing) || !qIsNaN(t.contactRange))

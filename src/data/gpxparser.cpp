@@ -186,11 +186,9 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 		else if (_reader.name() == QLatin1String("yaw"))
 			trackpoint.rtelemetry().yaw
 			  = numberRaw(trackpoint.rtelemetry().yawRaw);
-		else if (_reader.name() == QLatin1String("airspeed"))
-			trackpoint.rtelemetry().airspeed
-			  = numberRaw(trackpoint.rtelemetry().airspeedRawVal);
-		else if (_reader.name() == QLatin1String("airspeed_kt"))
-			trackpoint.rtelemetry().airspeedKt = number();
+		else if (_reader.name() == QLatin1String("ground_speed"))
+			trackpoint.rtelemetry().groundSpeed
+			  = numberRaw(trackpoint.rtelemetry().groundSpeedRaw);
 		else if (_reader.name() == QLatin1String("vspeed"))
 			trackpoint.rtelemetry().vspeed
 			  = numberRaw(trackpoint.rtelemetry().vspeedRaw);
@@ -211,18 +209,27 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 			  = numberRaw(trackpoint.rtelemetry().navBearingRaw);
 		else if (_reader.name() == QLatin1String("nav_range"))
 			trackpoint.rtelemetry().navRange = number();
-		else if (_reader.name() == QLatin1String("radar_mode"))
-			trackpoint.rtelemetry().radarMode = number();
-		else if (_reader.name() == QLatin1String("radar_scan_width"))
-			trackpoint.rtelemetry().radarScan = number();
-		else if (_reader.name() == QLatin1String("radar_scan_program"))
-			trackpoint.rtelemetry().radarScanProgram = number();
-		else if (_reader.name() == QLatin1String("look_az"))
-			trackpoint.rtelemetry().lookAzimuth = number();
+		// Approach/landing system (ex-"radar mode/scan/program").
+		else if (_reader.name() == QLatin1String("apch_mode"))
+			trackpoint.rtelemetry().apchMode = number();
+		else if (_reader.name() == QLatin1String("apch_scan"))
+			trackpoint.rtelemetry().apchScan = number();
+		else if (_reader.name() == QLatin1String("apch_prog"))
+			trackpoint.rtelemetry().apchProg = number();
+		// Zhuk radar state + antenna azimuth.
 		else if (_reader.name() == QLatin1String("radar_state"))
 			trackpoint.rtelemetry().radarState = number();
+		else if (_reader.name() == QLatin1String("radar_scan_mode"))
+			trackpoint.rtelemetry().radarScanMode = number();
 		else if (_reader.name() == QLatin1String("radar_az"))
-			trackpoint.rtelemetry().radarAz = number();
+			trackpoint.rtelemetry().radarAz
+			  = numberRaw(trackpoint.rtelemetry().radarAzRaw);
+		else if (_reader.name() == QLatin1String("radar_az_rel"))
+			trackpoint.rtelemetry().radarAzRel
+			  = numberRaw(trackpoint.rtelemetry().radarAzRelRaw);
+		else if (_reader.name() == QLatin1String("radar_search_az"))
+			trackpoint.rtelemetry().radarSearchAz
+			  = numberRaw(trackpoint.rtelemetry().radarSearchAzRaw);
 		else if (_reader.name() == QLatin1String("track_bearing"))
 			trackpoint.rtelemetry().trackBearing
 			  = numberRaw(trackpoint.rtelemetry().trackBearingRaw);
@@ -247,8 +254,6 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 		else if (_reader.name() == QLatin1String("beacon_range"))
 			trackpoint.rtelemetry().beaconRange
 			  = numberRaw(trackpoint.rtelemetry().beaconRangeRaw);
-		else if (_reader.name() == QLatin1String("event"))
-			trackpoint.rtelemetry().event = number();
 		else if (_reader.name() == QLatin1String("gear"))
 			trackpoint.rtelemetry().gear = (int)number();
 		else if (_reader.name() == QLatin1String("wow"))

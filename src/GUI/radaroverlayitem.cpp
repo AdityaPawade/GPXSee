@@ -56,7 +56,7 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	setPos(apex);
 
 	const VizConfig &cfg = VizConfig::instance();
-	_mode = std::isnan(t.radarMode) ? 0 : (int)(t.radarMode + 0.5);
+	_mode = std::isnan(t.radarState) ? 0 : (int)(t.radarState + 0.5);
 	_cone.clear();
 	_hasLookRay = false;
 	_hasTrack = false;
@@ -65,17 +65,28 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	_track = QPointF();
 	_contact = QPointF();
 
-	// Continuous radar state: a raw search-mode field can read OFF while locked,
-	// so use radarState + the effective antenna azimuth. The azimuth is present
-	// only while the antenna is pointed at a tracked target (LOCK); in SEARCH/OFF
-	// it is absent. The FOV wedge and look-ray are anchored on that azimuth, so
-	// they are drawn ONLY when it is present (never at a stale/north default).
-	bool haveState = !std::isnan(t.radarState);
-	bool radarOn = haveState ? ((int)(t.radarState + 0.5) >= 1)
-	  : cfg.radarOn(t.radarMode);
-	double azimuth = !std::isnan(t.radarAz) ? t.radarAz : t.lookAzimuth;
+	// RAW TRUTH: the overlay renders only RECORDED values, and never fuses
+	// channels.
+	//   * radarAz is the recorded ABSOLUTE antenna azimuth -> used directly.
+	//   * if only the search sector is active (no absolute azimuth recorded),
+	//     the sector is anchored to the recorded heading (yaw) = the antenna
+	//     boresight. The nose-relative search azimuth is NEVER combined with
+	//     heading to synthesise an absolute pointing direction.
+	//   * the sector WIDTH is a user-defined display choice from viz.cfg
+	//     [radar_scan_modes], keyed by the recorded scan-mode byte — not a
+	//     value measured or derived from the telemetry.
+	int state = std::isnan(t.radarState) ? -1 : (int)(t.radarState + 0.5);
+	bool radarOn = state >= 1;
+	double azimuth = NAN;
+	if (!std::isnan(t.radarAz))
+		azimuth = t.radarAz;            // recorded absolute antenna azimuth
+	else if (radarOn && !std::isnan(t.yaw))
+		azimuth = t.yaw;                // boresight = recorded heading
 	bool haveAzimuth = !std::isnan(azimuth);
-	double scan = std::isnan(t.radarScan) ? cfg.scanDefaultDeg : t.radarScan;
+
+	double scan = cfg.scanModeWidthDeg(t.radarScanMode);
+	if (std::isnan(scan))
+		scan = cfg.scanDefaultDeg;
 	if ((_components & Fov) && cfg.showScanWedge && radarOn && scan > 0
 	  && haveAzimuth) {
 		double half = scan / 2.0;
@@ -90,15 +101,25 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	}
 
 	// The radar FOV is a sensor-attribute overlay: it keeps its own dedicated
-	// colour and does NOT follow the per-track colour.
-	_color = cfg.radarModeColor(_mode);
+	// colour (per radar state) and does NOT follow the per-track colour.
+	_color = cfg.radarStateColor(t.radarState);
+	if (!_color.isValid())
+		_color = cfg.radarDefaultColor;
 
-	if ((_components & LookRay) && cfg.showLookRay && !std::isnan(azimuth)) {
-		_lookRay = _map->ll2xy(destination(pos, azimuth,
+	// Look ray = the recorded ABSOLUTE antenna azimuth (radarAz) only, drawn as
+	// a direction line (no range implied, single channel, no fusion). Absent
+	// when no absolute azimuth was recorded near this point.
+	if ((_components & LookRay) && cfg.showLookRay && !std::isnan(t.radarAz)) {
+		_lookRay = _map->ll2xy(destination(pos, t.radarAz,
 		  cfg.fovRangeMeters * 0.75)) - apex;
 		_hasLookRay = true;
 	}
 
+	// Radar-track + datalink-contact markers. The bearing/range/altitude are
+	// RECORDED values (shown raw in the Targets panel); to place the marker on a
+	// north-up map the recorded nose-relative bearing is referenced to the
+	// recorded heading (yaw). This is a geometric plot of recorded data, not an
+	// invented value.
 	if ((_components & Contacts) && cfg.showTrack && !std::isnan(t.yaw)
 	  && !std::isnan(t.trackBearing)
 	  && !std::isnan(t.trackRange) && t.trackRange > 0) {
@@ -106,7 +127,6 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		_track = _map->ll2xy(c) - apex;
 		_hasTrack = true;
 	}
-
 	if ((_components & Contacts) && cfg.showContact && !std::isnan(t.yaw)
 	  && !std::isnan(t.contactBearing)
 	  && !std::isnan(t.contactRange) && t.contactRange > 0) {
@@ -115,10 +135,10 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		_hasContact = true;
 	}
 
-	// Always span from the apex (0,0): the look-ray / track / contact lines all
-	// start there, so the bounding rect must include it. Without this, in LOCK
-	// (no FOV wedge) the rect would cover only the far endpoint and Qt would cull
-	// the whole item when zoomed in near the apex — the ray would vanish.
+	// Always span from the apex (0,0): the look-ray / markers all start there, so
+	// the bounding rect must include it. Without this, in LOCK (no FOV wedge) the
+	// rect would cover only the far endpoint and Qt would cull the whole item
+	// when zoomed in near the apex — the ray would vanish.
 	QRectF b = _cone.boundingRect();
 	b |= QRectF(-2, -2, 4, 4);
 	if (_hasLookRay)
@@ -162,6 +182,7 @@ void RadarOverlayItem::paint(QPainter *painter,
 	painter->setBrush(QColor(0, 0, 0));
 	painter->drawEllipse(QPointF(0, 0), 3, 3);
 
+	// Radar-track marker: a square (with a dotted lead-in line from the jet).
 	if (_hasTrack) {
 		painter->setPen(QPen(cfg.trackColor, cfg.targetLineWidthPx, Qt::DotLine));
 		painter->setBrush(Qt::NoBrush);
@@ -174,6 +195,7 @@ void RadarOverlayItem::paint(QPainter *painter,
 		painter->drawLine(_track + QPointF(0, -r - 3), _track + QPointF(0, r + 3));
 	}
 
+	// Datalink-contact marker: a circle (with a dotted lead-in line from the jet).
 	if (_hasContact) {
 		painter->setPen(QPen(cfg.contactColor, cfg.targetLineWidthPx, Qt::DotLine));
 		painter->setBrush(Qt::NoBrush);

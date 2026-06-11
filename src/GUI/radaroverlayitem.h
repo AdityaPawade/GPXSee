@@ -46,8 +46,8 @@ private:
 	int _mode;
 	QPolygonF _cone;     // local coords relative to apex (this item's pos)
 	QPointF _lookRay;    // local
-	QPointF _track;      // local
-	QPointF _contact;    // local
+	QPointF _track;      // local: recorded radar-track contact, plotted at heading+bearing
+	QPointF _contact;    // local: recorded datalink contact, plotted at heading+bearing
 	QColor _color;
 	QColor _trackColor;  // optional per-track tint (invalid = use cfg colours)
 	QRectF _bound;

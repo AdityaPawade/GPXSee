@@ -42,16 +42,18 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	_beaconSection = new CollapsibleSection(cfg.panelTitle("nav_beacon"), body);
 
 	_flightTable = createTable(QStringList() << "track_name" << "position"
-	  << "airspeed" << "vspeed");
+	  << "ground_speed" << "vspeed");
 	_attitudeTable = createTable(QStringList() << "yaw" << "pitch" << "roll"
 	  << "roll_rate" << "yaw_rate");
 	_engineTable = createTable(QStringList() << "fuel");
 	_discretesTable = createTable(QStringList() << "gear" << "wow"
-	  << "auto_slats" << "event");
-	_radarTable = createTable(QStringList() << "sensor_mode" << "scan_width"
-	  << "scan_program" << "look_az");
+	  << "auto_slats" << "apch_mode" << "apch_scan" << "apch_prog");
+	_radarTable = createTable(QStringList() << "sensor_mode" << "scan_mode"
+	  << "search_az" << "lock_az" << "lock_az_rel");
+	// Targets carry only nose-relative bearings; we show those raw and do NOT
+	// add an absolute-bearing column (that would need heading fusion).
 	_targetsTable = createTable(QStringList() << "track_bearing"
-	  << "track_range" << "bearing_abs" << "contact_bearing"
+	  << "track_range" << "contact_bearing"
 	  << "contact_range" << "contact_alt");
 	_beaconTable = createTable(QStringList() << "beacon_bearing"
 	  << "beacon_bearing_rel" << "beacon_range");
@@ -66,6 +68,8 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 
 	addOverlay(_radarSection, "radar_fov", MapView::RadarFov);
 	addOverlay(_radarSection, "look_ray", MapView::LookRay);
+	// Targets/contacts markers: recorded bearing/range plotted at the recorded
+	// heading. Values also shown raw in the Targets section.
 	addOverlay(_targetsSection, "targets", MapView::Contacts);
 	addOverlay(_beaconSection, "beacon", MapView::Beacon);
 
@@ -282,13 +286,6 @@ QString TelemetryPanel::rangeKm(qreal meters) const
 	return QString::number(meters / 1000.0, 'f', 1) + " km";
 }
 
-QString TelemetryPanel::bearingPair(qreal rel, qreal abs) const
-{
-	if (std::isnan(rel))
-		return VizConfig::instance().missingValueLabel;
-	return QString("%1 / %2").arg(num(rel, 1, "deg")).arg(num(abs, 1, "deg"));
-}
-
 QString TelemetryPanel::boolStr(int v, const QString &on,
   const QString &off) const
 {
@@ -334,14 +331,15 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 	// Every decoded value in the PANEL is shown with its raw source integer in
 	// parentheses (withRaw / withRawHex); absent raw -> value shown unchanged.
 	// Map overlays are deliberately left untouched (no parentheses on the map).
-	bool haveFlight = pos.isValid() || !std::isnan(t.airspeed)
-	  || !std::isnan(t.airspeedKt) || !std::isnan(t.vspeed);
+	bool haveFlight = pos.isValid() || !std::isnan(t.groundSpeed)
+	  || !std::isnan(t.vspeed);
+	// ground_speed = recorded speed channel (raw 0x156); m/s -> km/h for display.
 	updateSection(_flightSection, _flightTable, QStringList()
 	  << (name.isEmpty() ? cfg.missingValueLabel : name)
 	  << (pos.isValid() ? QString("%1, %2").arg(pos.lat(), 0, 'f', 5)
 		.arg(pos.lon(), 0, 'f', 5) : cfg.missingValueLabel)
-	  << withRaw(std::isnan(t.airspeedKt) ? num(t.airspeed, 0, "km/h")
-		: num(t.airspeedKt, 0, "kt"), t.airspeedRawVal)
+	  << withRaw(std::isnan(t.groundSpeed) ? cfg.missingValueLabel
+		: num(t.groundSpeed * 3.6, 0, "km/h"), t.groundSpeedRaw)
 	  << withRaw(num(t.vspeed, 1, "m/s"), t.vspeedRaw),
 	  QList<QColor>(), haveFlight);
 
@@ -362,60 +360,60 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 		: withRaw(num(t.fuelKg, 0, "kg"), t.fuelRaw)),
 	  QList<QColor>(), haveEngine);
 
-	bool eventActive = !std::isnan(t.event) && t.event >= cfg.eventActiveThreshold;
 	bool haveDiscretes = t.gear >= 0 || t.wow >= 0 || t.autoSlats >= 0
-	  || !std::isnan(t.event);
-	// Gear and WOW both derive from the same wow_raw source byte; auto-slats from
-	// its own raw byte. Discrete states are shown with their source byte in hex.
+	  || !std::isnan(t.apchMode);
+	// Gear and WOW both come from the same wow_raw source byte; auto-slats from
+	// its own byte. Discrete states show the source byte in hex. The
+	// approach-system codes follow as plain recorded values.
 	updateSection(_discretesSection, _discretesTable, QStringList()
 	  << withRawHex(boolStr(t.gear, cfg.gearDownLabel, cfg.gearUpLabel), t.wowRaw)
 	  << withRawHex(boolStr(t.wow, cfg.wowGroundLabel, cfg.wowAirLabel), t.wowRaw)
 	  << withRawHex(boolStr(t.autoSlats, cfg.slatsOutLabel, cfg.slatsInLabel),
 		t.autoSlatsRaw)
-	  << (eventActive ? cfg.eventActiveLabel : cfg.eventIdleLabel),
-	  QList<QColor>() << QColor() << QColor() << QColor()
-	  << (eventActive ? cfg.eventActiveColor : QColor()), haveDiscretes);
+	  << num(t.apchMode, 0) << num(t.apchScan, 0) << num(t.apchProg, 0),
+	  QList<QColor>(), haveDiscretes);
 
 	bool haveState = !std::isnan(t.radarState);
-	bool radarOn = haveState ? ((int)(t.radarState + 0.5) >= 1)
-	  : cfg.radarOn(t.radarMode);
-	bool lockNoScan = haveState && (int)(t.radarState + 0.5) == 2
-	  && (std::isnan(t.radarScan) || t.radarScan <= 0);
-	bool haveRadar = !std::isnan(t.radarState) || !std::isnan(t.radarMode)
-	  || !std::isnan(t.radarScan) || !std::isnan(t.radarScanProgram)
-	  || !std::isnan(t.lookAzimuth) || !std::isnan(t.radarAz);
-	// Mode shows the state/mode NAME with the raw mode byte (e.g. "SEARCH (68)").
+	int rstate = haveState ? (int)(t.radarState + 0.5) : 0;
+	bool radarOn = haveState && rstate >= 1;
+	bool lockNoScan = rstate == 2;   // single-target lock = pencil beam, no sector
+	double scanDeg = cfg.scanModeWidthDeg(t.radarScanMode);
+	bool haveRadar = !std::isnan(t.radarState) || !std::isnan(t.radarScanMode)
+	  || !std::isnan(t.radarSearchAz) || !std::isnan(t.radarAz)
+	  || !std::isnan(t.radarAzRel);
+	// State NAME with the raw scan-mode code in parentheses; scan as a sector
+	// width; the two azimuths shown only when present (lock vs search phase).
 	updateSection(_radarSection, _radarTable, QStringList()
-	  << withRaw(haveState ? cfg.radarStateName(t.radarState)
-		: cfg.radarModeName(t.radarMode), t.radarMode)
+	  << cfg.radarStateName(t.radarState)
 	  << (lockNoScan ? cfg.lockScanLabel
-		: std::isnan(t.radarScan) ? cfg.missingValueLabel
-		: QString("%1 deg").arg(t.radarScan, 0, 'f', 0))
-	  << num(t.radarScanProgram, 0)
-	  << num(std::isnan(t.radarAz) ? t.lookAzimuth : t.radarAz, 1, "deg"),
-	  QList<QColor>() << (radarOn ? cfg.radarActiveColor : QColor())
-	  << QColor() << QColor() << cfg.lookRayColor, haveRadar);
+		: std::isnan(t.radarScanMode) ? cfg.missingValueLabel
+		: std::isnan(scanDeg) ? QString("mode %1").arg(t.radarScanMode, 0, 'f', 0)
+		: scanDeg <= 0 ? cfg.lockScanLabel
+		: withRaw(QString("+-%1 deg").arg(scanDeg / 2.0, 0, 'f', 0),
+		  t.radarScanMode))
+	  << withRaw(num(t.radarSearchAz, 1, "deg"), t.radarSearchAzRaw)
+	  << withRaw(num(t.radarAz, 1, "deg"), t.radarAzRaw)
+	  << withRaw(num(t.radarAzRel, 1, "deg"), t.radarAzRelRaw),
+	  QList<QColor>() << (radarOn ? cfg.radarStateColor(t.radarState) : QColor())
+	  << QColor() << cfg.lookRayColor << cfg.lookRayColor << QColor(),
+	  haveRadar);
 
-	qreal trackAbs = (!std::isnan(t.yaw) && !std::isnan(t.trackBearing))
-	  ? t.yaw + t.trackBearing : NAN;
-	qreal contactAbs = (!std::isnan(t.yaw) && !std::isnan(t.contactBearing))
-	  ? t.yaw + t.contactBearing : NAN;
 	bool hasTrack = !std::isnan(t.trackBearing) && !std::isnan(t.trackRange);
 	bool hasContact = !std::isnan(t.contactBearing) && !std::isnan(t.contactRange);
+	// RAW TRUTH: targets are recorded as nose-relative bearing + range; shown as
+	// recorded. No absolute bearing is computed (that needs heading fusion).
 	updateSection(_targetsSection, _targetsTable, QStringList()
-	  << (hasTrack ? withRaw(bearingPair(t.trackBearing, trackAbs),
-		t.trackBearingRaw) : cfg.missingValueLabel)
+	  << (hasTrack ? withRaw(num(t.trackBearing, 1, "deg"), t.trackBearingRaw)
+		: cfg.missingValueLabel)
 	  << (hasTrack ? withRaw(rangeKm(t.trackRange), t.trackRangeRaw)
 		: cfg.missingValueLabel)
-	  << (hasTrack ? num(trackAbs, 1, "deg") : cfg.missingValueLabel)
-	  << (hasContact ? withRaw(bearingPair(t.contactBearing, contactAbs),
-		t.contactBearingRaw) : cfg.missingValueLabel)
+	  << (hasContact ? withRaw(num(t.contactBearing, 1, "deg"), t.contactBearingRaw)
+		: cfg.missingValueLabel)
 	  << (hasContact ? withRaw(rangeKm(t.contactRange), t.contactRangeRaw)
 		: cfg.missingValueLabel)
 	  << (hasContact ? withRaw(num(t.contactAltitude, 0, "m"),
 		t.contactAltitudeRaw) : cfg.missingValueLabel),
 	  QList<QColor>() << (hasTrack ? cfg.trackColor : QColor())
-	  << (hasTrack ? cfg.trackColor : QColor())
 	  << (hasTrack ? cfg.trackColor : QColor())
 	  << (hasContact ? cfg.contactColor : QColor())
 	  << (hasContact ? cfg.contactColor : QColor())

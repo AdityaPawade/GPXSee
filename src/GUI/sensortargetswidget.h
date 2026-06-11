@@ -26,7 +26,6 @@ public slots:
 
 private:
 	void set(int row, const QString &value, const QColor &color = QColor());
-	QString bearingPair(qreal rel, qreal abs) const;
 	QString range(qreal meters) const;
 
 	Mode _mode;
