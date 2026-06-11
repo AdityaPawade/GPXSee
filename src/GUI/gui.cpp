@@ -136,6 +136,8 @@ GUI::GUI(const QString &lang)
 			case TelemetryPanel::CapRadar:     return c.radar;
 			case TelemetryPanel::CapTargets:   return c.targets;
 			case TelemetryPanel::CapBeacon:    return c.beacon;
+			case TelemetryPanel::CapRWR:       return c.rwr;
+			case TelemetryPanel::CapMAWS:      return c.maws;
 		}
 		return false;
 	});

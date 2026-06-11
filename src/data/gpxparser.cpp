@@ -245,6 +245,18 @@ void GPXParser::trkptExtensions(Trackpoint &trackpoint)
 		else if (_reader.name() == QLatin1String("contact_alt"))
 			trackpoint.rtelemetry().contactAltitude
 			  = numberRaw(trackpoint.rtelemetry().contactAltitudeRaw);
+		else if (_reader.name() == QLatin1String("threat_bearing"))
+			trackpoint.rtelemetry().threatBearing
+			  = numberRaw(trackpoint.rtelemetry().threatBearingRaw);
+		else if (_reader.name() == QLatin1String("threat_range"))
+			trackpoint.rtelemetry().threatRange
+			  = numberRaw(trackpoint.rtelemetry().threatRangeRaw);
+		else if (_reader.name() == QLatin1String("rwr_status"))
+			trackpoint.rtelemetry().rwrStatus = number();
+		else if (_reader.name() == QLatin1String("rwr_phase"))
+			trackpoint.rtelemetry().rwrPhase = number();
+		else if (_reader.name() == QLatin1String("rwr_code"))
+			trackpoint.rtelemetry().rwrCode = number();
 		else if (_reader.name() == QLatin1String("beacon_bearing"))
 			trackpoint.rtelemetry().beaconBearing
 			  = numberRaw(trackpoint.rtelemetry().beaconBearingRaw);

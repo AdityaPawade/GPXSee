@@ -20,7 +20,8 @@ class TelemetryPanel : public QScrollArea
 
 public:
 	enum Capability {
-		CapAttitude, CapEngine, CapDiscretes, CapRadar, CapTargets, CapBeacon
+		CapAttitude, CapEngine, CapDiscretes, CapRadar, CapTargets, CapBeacon,
+		CapRWR, CapMAWS
 	};
 
 	TelemetryPanel(QWidget *parent = 0);
@@ -76,6 +77,8 @@ private:
 	CollapsibleSection *_discretesSection;
 	CollapsibleSection *_radarSection;
 	CollapsibleSection *_targetsSection;
+	CollapsibleSection *_rwrSection;
+	CollapsibleSection *_mawsSection;
 	CollapsibleSection *_beaconSection;
 	QTableWidget *_flightTable;
 	QTableWidget *_attitudeTable;
@@ -83,6 +86,8 @@ private:
 	QTableWidget *_discretesTable;
 	QTableWidget *_radarTable;
 	QTableWidget *_targetsTable;
+	QTableWidget *_rwrTable;
+	QTableWidget *_mawsTable;
 	QTableWidget *_beaconTable;
 	QHash<int, QCheckBox*> _overlayChecks;
 	QCheckBox *_renderAllCheck;

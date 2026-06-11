@@ -64,14 +64,16 @@ public:
 		RadarFov,
 		LookRay,
 		Contacts,
-		Beacon
+		Beacon,
+		Maws,
+		Rwr
 	};
 	// Which telemetry groups a track exposes ANYWHERE along its length. Used to
 	// decide, once per track, which panel sections to show persistently.
 	struct TelemetryCaps {
-		bool attitude, engineFuel, discretes, radar, targets, beacon;
+		bool attitude, engineFuel, discretes, radar, targets, beacon, rwr, maws;
 		TelemetryCaps() : attitude(false), engineFuel(false), discretes(false),
-		  radar(false), targets(false), beacon(false) {}
+		  radar(false), targets(false), beacon(false), rwr(false), maws(false) {}
 	};
 	Q_DECLARE_FLAGS(Flags, Flag)
 

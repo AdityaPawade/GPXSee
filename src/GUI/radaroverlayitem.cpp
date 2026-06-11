@@ -11,7 +11,9 @@
 
 RadarOverlayItem::RadarOverlayItem(QGraphicsItem *parent)
   : QGraphicsItem(parent), _map(0), _active(false), _hasLookRay(false),
-    _hasTrack(false), _hasContact(false), _components(All), _mode(0)
+    _hasTrack(false), _hasContact(false), _hasThreat(false),
+    _hasRwr(false), _rwrAlert(false),
+    _components(All), _mode(0)
 {
 	setZValue(Z_VALUE);
 	setVisible(false);
@@ -37,6 +39,8 @@ void RadarOverlayItem::clear()
 		_hasLookRay = false;
 		_hasTrack = false;
 		_hasContact = false;
+		_hasThreat = false;
+		_hasRwr = false;
 		_bound = QRectF();
 		setVisible(false);
 		update();
@@ -61,9 +65,13 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 	_hasLookRay = false;
 	_hasTrack = false;
 	_hasContact = false;
+	_hasThreat = false;
+	_hasRwr = false;
+	_rwrAlert = false;
 	_lookRay = QPointF();
 	_track = QPointF();
 	_contact = QPointF();
+	_threat = QPointF();
 
 	// RAW TRUTH: the overlay renders only RECORDED values, and never fuses
 	// channels.
@@ -135,6 +143,26 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		_hasContact = true;
 	}
 
+	// MAWS incoming-missile ray = the recorded ABSOLUTE threat bearing (c2b48),
+	// drawn from the jet. It is already an absolute compass bearing AS RECORDED,
+	// used directly with NO heading fusion. When a range was recorded the diamond
+	// sits at the REAL distance (a positioned missile); otherwise it is a
+	// fixed-length direction ray. Has its own "MAWS" overlay toggle.
+	if ((_components & MawsRay) && !std::isnan(t.threatBearing)) {
+		double dist = (!std::isnan(t.threatRange) && t.threatRange > 0)
+		  ? t.threatRange : cfg.fovRangeMeters;
+		_threat = _map->ll2xy(destination(pos, t.threatBearing, dist)) - apex;
+		_hasThreat = true;
+	}
+
+	// RWR warning ring at the ownship — a STATE annunciator (no bearing): present
+	// whenever an RWR status byte was recorded; it goes to its "alert" style when
+	// the raw latch has a detect bit set (cfg.rwrAlert, a config lookup).
+	if ((_components & RwrRing) && !std::isnan(t.rwrStatus)) {
+		_hasRwr = true;
+		_rwrAlert = cfg.rwrAlert(t.rwrStatus);
+	}
+
 	// Always span from the apex (0,0): the look-ray / markers all start there, so
 	// the bounding rect must include it. Without this, in LOCK (no FOV wedge) the
 	// rect would cover only the far endpoint and Qt would cull the whole item
@@ -147,9 +175,14 @@ void RadarOverlayItem::setData(const Coordinates &pos, const Telemetry &t)
 		b |= QRectF(_track - QPointF(16, 16), QSizeF(32, 32));
 	if (_hasContact)
 		b |= QRectF(_contact - QPointF(16, 16), QSizeF(32, 32));
+	if (_hasThreat)
+		b |= QRectF(_threat - QPointF(8, 8), QSizeF(16, 16));
+	if (_hasRwr)
+		b |= QRectF(-26, -26, 52, 52);
 	_bound = b.adjusted(-4, -4, 4, 4);
 
-	_active = _cone.size() > 2 || _hasLookRay || _hasTrack || _hasContact;
+	_active = _cone.size() > 2 || _hasLookRay || _hasTrack || _hasContact
+	  || _hasThreat || _hasRwr;
 	setVisible(_active);
 	update();
 }
@@ -206,5 +239,42 @@ void RadarOverlayItem::paint(QPainter *painter,
 		painter->drawEllipse(_contact, r, r);
 		painter->drawLine(_contact + QPointF(-r - 3, 0), _contact + QPointF(r + 3, 0));
 		painter->drawLine(_contact + QPointF(0, -r - 3), _contact + QPointF(0, r + 3));
+	}
+
+	// EW threat ray: a long dashed line from the jet along the recorded ABSOLUTE
+	// threat bearing, with an open diamond at the far end. Direction only (no
+	// range recorded), distinct threat colour so it reads as "incoming bearing".
+	if (_hasThreat) {
+		painter->setPen(QPen(cfg.threatColor, cfg.lookRayWidthPx, Qt::DashDotLine));
+		painter->setBrush(Qt::NoBrush);
+		painter->drawLine(QPointF(0, 0), _threat);
+		double d = 5.0;
+		QPolygonF diamond;
+		diamond << _threat + QPointF(0, -d) << _threat + QPointF(d, 0)
+		        << _threat + QPointF(0, d) << _threat + QPointF(-d, 0);
+		painter->setPen(QPen(cfg.threatColor, 2.0));
+		painter->drawPolygon(diamond);
+	}
+
+	// RWR annunciator ring around the jet (a STATE indicator, no bearing). Idle =
+	// a thin dotted gold ring (receiver active); on threat-detect = a bold red
+	// double-ring with 8 radial ticks — a cockpit RWR-scope look.
+	if (_hasRwr) {
+		QColor rc = _rwrAlert ? cfg.rwrAlertColor : cfg.rwrColor;
+		painter->setBrush(Qt::NoBrush);
+		if (_rwrAlert) {
+			painter->setPen(QPen(rc, 2.5));
+			painter->drawEllipse(QPointF(0, 0), 15, 15);
+			painter->setPen(QPen(rc, 1.5));
+			painter->drawEllipse(QPointF(0, 0), 21, 21);
+			for (int k = 0; k < 8; k++) {
+				double a = DEG2RAD(k * 45.0);
+				painter->drawLine(QPointF(15 * std::sin(a), -15 * std::cos(a)),
+				                  QPointF(21 * std::sin(a), -21 * std::cos(a)));
+			}
+		} else {
+			painter->setPen(QPen(rc, 1.2, Qt::DotLine));
+			painter->drawEllipse(QPointF(0, 0), 18, 18);
+		}
 	}
 }

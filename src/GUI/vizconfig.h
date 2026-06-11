@@ -56,6 +56,10 @@ public:
 	QColor lookRayColor;
 	double lookRayWidthPx;
 	QColor trackColor, contactColor;
+	QColor threatColor;   // MAWS missile ray + diamond (magenta)
+	QColor rwrColor;      // RWR ring + panel when idle (gold)
+	QColor rwrAlertColor; // RWR ring + panel when the threat latch fires (red)
+	int rwrAlertMask;     // raw rwr_status bits that mean "threat detected" (0x04)
 	QColor beaconColor;
 	double trackMarkerRadiusPx, contactMarkerRadiusPx;
 	double targetLineWidthPx;
@@ -91,6 +95,9 @@ public:
 	// Full sector width (deg) for a raw scan-mode code: >0 = sector wedge,
 	// 0 = pencil beam (ray only, no wedge), NAN = unknown (caller may default).
 	double  scanModeWidthDeg(double mode) const;
+	// True when the raw RWR status byte has any alert bit set (rwrAlertMask) —
+	// a config-driven lookup, not invented logic. NAN/absent -> false.
+	bool    rwrAlert(double status) const;
 	QString lockScanLabel;   // shown for scan-mode during a lock (no sector scan)
 	QString panelTitle(const QString &key) const;
 	QString fieldLabel(const QString &key) const;

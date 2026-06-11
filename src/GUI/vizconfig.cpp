@@ -104,6 +104,10 @@ void VizConfig::loadDefaults()
 	lookRayWidthPx = 2.0;
 	trackColor = QColor(255, 170, 0);
 	contactColor = QColor(230, 30, 30);
+	threatColor = QColor(220, 40, 220);   // MAWS missile ray + diamond (magenta)
+	rwrColor = QColor(240, 200, 0);       // RWR idle ring + panel (gold)
+	rwrAlertColor = QColor(255, 40, 40);  // RWR threat-detected ring + panel (red)
+	rwrAlertMask = 0x04;                  // rwr_status bit(s) meaning "detected" (0x86 vs 0x80/0x82)
 	beaconColor = QColor(30, 170, 120);
 	trackMarkerRadiusPx = 7.0;
 	contactMarkerRadiusPx = 6.0;
@@ -122,6 +126,8 @@ void VizConfig::loadDefaults()
 	panelTitles.insert("discretes", "Discretes");
 	panelTitles.insert("radar", "Radar");
 	panelTitles.insert("targets_contacts", "Targets/Contacts");
+	panelTitles.insert("rwr", "RWR");
+	panelTitles.insert("maws", "MAWS");
 	panelTitles.insert("nav_beacon", "Nav Beacon");
 	panelTitles.insert("live_stats", "Live Stats");
 	panelTitles.insert("sensor", "Sensor");
@@ -155,6 +161,16 @@ void VizConfig::loadDefaults()
 	fieldLabels.insert("contact_alt", "Contact rel altitude");
 	fieldLabels.insert("track_bearing", "Track bearing");
 	fieldLabels.insert("track_range", "Track range");
+	fieldLabels.insert("threat_bearing", "Threat bearing (abs)");
+	// MAWS missile track + map-overlay toggle
+	fieldLabels.insert("missile_bearing", "Missile bearing (abs)");
+	fieldLabels.insert("missile_range", "Missile range");
+	fieldLabels.insert("maws", "MAWS missile");
+	fieldLabels.insert("rwr_ring", "RWR ring");
+	// RWR radar-warning discretes (raw recorded codes)
+	fieldLabels.insert("rwr_status", "Threat latch (raw)");
+	fieldLabels.insert("rwr_phase", "Defensive flag (raw)");
+	fieldLabels.insert("rwr_code", "Warning code (raw)");
 	fieldLabels.insert("bearing_rel", "Bearing (off nose)");
 	fieldLabels.insert("nav_bearing", "Nav bearing");
 	fieldLabels.insert("nav_range", "Nav range");
@@ -270,6 +286,10 @@ void VizConfig::loadFile(const QString &path)
 			else if (key == "look_ray_width_px") lookRayWidthPx = val.toDouble();
 			else if (key == "track_color") trackColor = parseColor(val, trackColor);
 			else if (key == "contact_color") contactColor = parseColor(val, contactColor);
+			else if (key == "threat_color") threatColor = parseColor(val, threatColor);
+			else if (key == "rwr_color") rwrColor = parseColor(val, rwrColor);
+			else if (key == "rwr_alert_color") rwrAlertColor = parseColor(val, rwrAlertColor);
+			else if (key == "rwr_alert_mask") rwrAlertMask = val.toInt(0, 0);
 			else if (key == "beacon_color") beaconColor = parseColor(val, beaconColor);
 			else if (key == "track_radius_px") trackMarkerRadiusPx = val.toDouble();
 			else if (key == "contact_radius_px") contactMarkerRadiusPx = val.toDouble();
@@ -349,6 +369,13 @@ QColor VizConfig::radarModeColor(int code) const
 bool VizConfig::radarOn(double mode) const
 {
 	return !std::isnan(mode) && (int)(mode + 0.5) > radarOnMinCode;
+}
+
+bool VizConfig::rwrAlert(double status) const
+{
+	if (std::isnan(status))
+		return false;
+	return ((int)(status + 0.5) & rwrAlertMask) != 0;
 }
 
 QString VizConfig::radarStateName(double state) const

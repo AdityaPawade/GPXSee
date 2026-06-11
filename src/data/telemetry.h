@@ -37,7 +37,9 @@ struct Telemetry
 	    radarAz(NAN), radarAzRel(NAN), radarSearchAz(NAN),
 	    trackBearing(NAN),
 	    trackRange(NAN), contactBearing(NAN), contactRange(NAN),
-	    contactAltitude(NAN), beaconBearing(NAN), beaconBearingRel(NAN),
+	    contactAltitude(NAN), threatBearing(NAN), threatRange(NAN),
+	    rwrStatus(NAN), rwrPhase(NAN), rwrCode(NAN),
+	    beaconBearing(NAN), beaconBearingRel(NAN),
 	    beaconRange(NAN), gear(-1), wow(-1), wowRaw(-1),
 	    autoSlats(-1), autoSlatsRaw(-1),
 	    rollRaw(NAN), pitchRaw(NAN), yawRaw(NAN),
@@ -45,7 +47,8 @@ struct Telemetry
 	    vspeedRaw(NAN), rollRateRaw(NAN), yawRateRaw(NAN), navBearingRaw(NAN),
 	    radarAzRaw(NAN), radarAzRelRaw(NAN), radarSearchAzRaw(NAN),
 	    trackBearingRaw(NAN), trackRangeRaw(NAN), contactBearingRaw(NAN),
-	    contactRangeRaw(NAN), contactAltitudeRaw(NAN), beaconBearingRaw(NAN),
+	    contactRangeRaw(NAN), contactAltitudeRaw(NAN), threatBearingRaw(NAN),
+	    threatRangeRaw(NAN), beaconBearingRaw(NAN),
 	    beaconBearingRelRaw(NAN), beaconRangeRaw(NAN) {}
 
 	bool isValid() const
@@ -55,6 +58,8 @@ struct Telemetry
 		  || !std::isnan(radarSearchAz) || !std::isnan(radarAz)
 		  || !std::isnan(trackRange)
 		  || !std::isnan(contactRange) || !std::isnan(beaconRange)
+		  || !std::isnan(threatBearing) || !std::isnan(threatRange)
+		  || !std::isnan(rwrStatus) || !std::isnan(rwrCode)
 		  || gear >= 0 || wow >= 0;
 	}
 
@@ -76,6 +81,19 @@ struct Telemetry
 
 	qreal trackBearing, trackRange;
 	qreal contactBearing, contactRange, contactAltitude;
+
+	/* MAWS missile track (c2b48 victim page) — threatBearing is the recorded
+	   ABSOLUTE bearing (raw u16 x 360/65536), threatRange the recorded range in
+	   metres. Together they position the incoming missile. Victim-only; already
+	   absolute, never fused. (Range precision is the simulator's ground truth.) */
+	qreal threatBearing, threatRange;
+
+	/* RWR radar-warning discretes (raw recorded bytes/words; 2b01 + 090b). Both
+	   jets carry these; only the engaged jet's status latches to "detected".
+	   rwrStatus = threat-detected latch, rwrPhase = defensive-phase flag,
+	   rwrCode = warning-active code. Shown raw, no interpretation. */
+	qreal rwrStatus, rwrPhase, rwrCode;
+
 	qreal beaconBearing, beaconBearingRel, beaconRange;
 	int gear, wow, wowRaw, autoSlats, autoSlatsRaw;
 
@@ -85,8 +103,8 @@ struct Telemetry
 	qreal rollRateRaw, yawRateRaw, navBearingRaw;
 	qreal radarAzRaw, radarAzRelRaw, radarSearchAzRaw;
 	qreal trackBearingRaw, trackRangeRaw, contactBearingRaw, contactRangeRaw;
-	qreal contactAltitudeRaw, beaconBearingRaw, beaconBearingRelRaw,
-	  beaconRangeRaw;
+	qreal contactAltitudeRaw, threatBearingRaw, threatRangeRaw, beaconBearingRaw,
+	  beaconBearingRelRaw, beaconRangeRaw;
 };
 
 #endif // TELEMETRY_H

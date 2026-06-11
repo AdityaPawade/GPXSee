@@ -39,6 +39,8 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	_discretesSection = new CollapsibleSection(cfg.panelTitle("discretes"), body);
 	_radarSection = new CollapsibleSection(cfg.panelTitle("radar"), body);
 	_targetsSection = new CollapsibleSection(cfg.panelTitle("targets_contacts"), body);
+	_rwrSection = new CollapsibleSection(cfg.panelTitle("rwr"), body);
+	_mawsSection = new CollapsibleSection(cfg.panelTitle("maws"), body);
 	_beaconSection = new CollapsibleSection(cfg.panelTitle("nav_beacon"), body);
 
 	_flightTable = createTable(QStringList() << "track_name" << "position"
@@ -55,6 +57,13 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	_targetsTable = createTable(QStringList() << "track_bearing"
 	  << "track_range" << "contact_bearing"
 	  << "contact_range" << "contact_alt");
+	// RWR (radar-warning receiver) discretes — raw recorded codes, panel-only
+	// (no geometry to plot). Present on both jets; only the engaged one latches.
+	_rwrTable = createTable(QStringList() << "rwr_status" << "rwr_phase"
+	  << "rwr_code");
+	// MAWS (missile-approach warning) — recorded incoming-missile bearing (abs)
+	// + range; rendered on the map as a positioned threat diamond.
+	_mawsTable = createTable(QStringList() << "missile_bearing" << "missile_range");
 	_beaconTable = createTable(QStringList() << "beacon_bearing"
 	  << "beacon_bearing_rel" << "beacon_range");
 
@@ -64,6 +73,8 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	_discretesSection->setContent(_discretesTable);
 	_radarSection->setContent(_radarTable);
 	_targetsSection->setContent(_targetsTable);
+	_rwrSection->setContent(_rwrTable);
+	_mawsSection->setContent(_mawsTable);
 	_beaconSection->setContent(_beaconTable);
 
 	addOverlay(_radarSection, "radar_fov", MapView::RadarFov);
@@ -71,6 +82,11 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	// Targets/contacts markers: recorded bearing/range plotted at the recorded
 	// heading. Values also shown raw in the Targets section.
 	addOverlay(_targetsSection, "targets", MapView::Contacts);
+	// MAWS overlay: positioned incoming-missile diamond (abs bearing + range).
+	addOverlay(_mawsSection, "maws", MapView::Maws);
+	// RWR overlay: a state annunciator ring around the jet (no bearing) — gold
+	// when the receiver is idle, red double-ring when the threat latch fires.
+	addOverlay(_rwrSection, "rwr_ring", MapView::Rwr);
 	addOverlay(_beaconSection, "beacon", MapView::Beacon);
 
 	// Per-track colour picker in the Flight section header. Opens QColorDialog
@@ -106,6 +122,8 @@ TelemetryPanel::TelemetryPanel(QWidget *parent) : QScrollArea(parent)
 	layout->addWidget(_discretesSection);
 	layout->addWidget(_radarSection);
 	layout->addWidget(_targetsSection);
+	layout->addWidget(_rwrSection);
+	layout->addWidget(_mawsSection);
 	layout->addWidget(_beaconSection);
 	layout->addStretch();
 
@@ -210,6 +228,8 @@ void TelemetryPanel::applyCapabilities()
 	_discretesSection->setVisible(all || _capabilityProvider(idx, CapDiscretes));
 	_radarSection->setVisible(all || _capabilityProvider(idx, CapRadar));
 	_targetsSection->setVisible(all || _capabilityProvider(idx, CapTargets));
+	_rwrSection->setVisible(all || _capabilityProvider(idx, CapRWR));
+	_mawsSection->setVisible(all || _capabilityProvider(idx, CapMAWS));
 	_beaconSection->setVisible(all || _capabilityProvider(idx, CapBeacon));
 	syncRenderAll();
 }
@@ -400,8 +420,7 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 
 	bool hasTrack = !std::isnan(t.trackBearing) && !std::isnan(t.trackRange);
 	bool hasContact = !std::isnan(t.contactBearing) && !std::isnan(t.contactRange);
-	// RAW TRUTH: targets are recorded as nose-relative bearing + range; shown as
-	// recorded. No absolute bearing is computed (that needs heading fusion).
+	// RAW TRUTH: track/contact are nose-relative bearings shown as recorded.
 	updateSection(_targetsSection, _targetsTable, QStringList()
 	  << (hasTrack ? withRaw(num(t.trackBearing, 1, "deg"), t.trackBearingRaw)
 		: cfg.missingValueLabel)
@@ -417,7 +436,38 @@ void TelemetryPanel::updateTelemetry(const QString &name,
 	  << (hasTrack ? cfg.trackColor : QColor())
 	  << (hasContact ? cfg.contactColor : QColor())
 	  << (hasContact ? cfg.contactColor : QColor())
-	  << (hasContact ? cfg.contactColor : QColor()), hasTrack || hasContact);
+	  << (hasContact ? cfg.contactColor : QColor()),
+	  hasTrack || hasContact);
+
+	// RWR radar-warning discretes — raw recorded codes (status/phase as hex,
+	// code decimal). Present on both jets; only the engaged one latches.
+	bool haveRwr = !std::isnan(t.rwrStatus) || !std::isnan(t.rwrPhase)
+	  || !std::isnan(t.rwrCode);
+	// RWR section colour: gold when the receiver is idle, red when the raw latch
+	// has the detect bit set (cfg.rwrAlert) — the panel itself signals the alert.
+	QColor rwrCol = cfg.rwrAlert(t.rwrStatus) ? cfg.rwrAlertColor : cfg.rwrColor;
+	updateSection(_rwrSection, _rwrTable, QStringList()
+	  << (std::isnan(t.rwrStatus) ? cfg.missingValueLabel
+		: QString("0x%1").arg((int)(t.rwrStatus + 0.5), 0, 16))
+	  << (std::isnan(t.rwrPhase) ? cfg.missingValueLabel
+		: QString("0x%1").arg((int)(t.rwrPhase + 0.5), 0, 16))
+	  << (std::isnan(t.rwrCode) ? cfg.missingValueLabel
+		: QString::number((int)(t.rwrCode + 0.5))),
+	  QList<QColor>() << (std::isnan(t.rwrStatus) ? QColor() : rwrCol)
+	  << (std::isnan(t.rwrPhase) ? QColor() : rwrCol)
+	  << (std::isnan(t.rwrCode) ? QColor() : rwrCol),
+	  haveRwr);
+
+	// MAWS incoming-missile track: recorded ABSOLUTE bearing + range, shown raw.
+	bool haveMaws = !std::isnan(t.threatBearing) || !std::isnan(t.threatRange);
+	updateSection(_mawsSection, _mawsTable, QStringList()
+	  << (std::isnan(t.threatBearing) ? cfg.missingValueLabel
+		: withRaw(num(t.threatBearing, 1, "deg"), t.threatBearingRaw))
+	  << (std::isnan(t.threatRange) ? cfg.missingValueLabel
+		: withRaw(rangeKm(t.threatRange), t.threatRangeRaw)),
+	  QList<QColor>() << (std::isnan(t.threatBearing) ? QColor() : cfg.threatColor)
+	  << (std::isnan(t.threatRange) ? QColor() : cfg.threatColor),
+	  haveMaws);
 
 	bool haveBeacon = !std::isnan(t.beaconBearing) || !std::isnan(t.beaconBearingRel)
 	  || !std::isnan(t.beaconRange);
@@ -434,7 +484,8 @@ void TelemetryPanel::clear()
 {
 	QList<CollapsibleSection*> sections;
 	sections << _flightSection << _attitudeSection << _engineSection
-	  << _discretesSection << _radarSection << _targetsSection << _beaconSection;
+	  << _discretesSection << _radarSection << _targetsSection << _rwrSection
+	  << _mawsSection << _beaconSection;
 	for (int i = 0; i < sections.size(); i++)
 		sections.at(i)->setVisible(false);
 }

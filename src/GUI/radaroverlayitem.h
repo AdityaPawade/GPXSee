@@ -16,7 +16,9 @@ public:
 		Fov = 0x1,
 		LookRay = 0x2,
 		Contacts = 0x4,
-		All = Fov | LookRay | Contacts
+		MawsRay = 0x8,
+		RwrRing = 0x10,
+		All = Fov | LookRay | Contacts | MawsRay | RwrRing
 	};
 
 	RadarOverlayItem(QGraphicsItem *parent = 0);
@@ -42,12 +44,16 @@ private:
 	bool _hasLookRay;
 	bool _hasTrack;
 	bool _hasContact;
+	bool _hasThreat;
+	bool _hasRwr;       // RWR warning ring present (rwr_status recorded)
+	bool _rwrAlert;     // RWR threat-detected (latch bit set) -> bold red ring
 	int _components;
 	int _mode;
 	QPolygonF _cone;     // local coords relative to apex (this item's pos)
 	QPointF _lookRay;    // local
 	QPointF _track;      // local: recorded radar-track contact, plotted at heading+bearing
 	QPointF _contact;    // local: recorded datalink contact, plotted at heading+bearing
+	QPointF _threat;     // local: EW threat ray endpoint, drawn at the recorded ABSOLUTE bearing
 	QColor _color;
 	QColor _trackColor;  // optional per-track tint (invalid = use cfg colours)
 	QRectF _bound;

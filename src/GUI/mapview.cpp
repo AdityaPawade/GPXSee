@@ -1646,10 +1646,14 @@ MapView::TelemetryCaps MapView::trackCapabilities(int trackId) const
 			if (!qIsNaN(t.trackBearing) || !qIsNaN(t.trackRange)
 			  || !qIsNaN(t.contactBearing) || !qIsNaN(t.contactRange))
 				caps.targets = true;
+			if (!qIsNaN(t.threatBearing) || !qIsNaN(t.threatRange))
+				caps.maws = true;
+			if (!qIsNaN(t.rwrStatus) || !qIsNaN(t.rwrPhase) || !qIsNaN(t.rwrCode))
+				caps.rwr = true;
 			if (!qIsNaN(t.beaconRange) || !qIsNaN(t.beaconBearing))
 				caps.beacon = true;
 			if (caps.attitude && caps.engineFuel && caps.discretes && caps.radar
-			  && caps.targets && caps.beacon)
+			  && caps.targets && caps.beacon && caps.maws && caps.rwr)
 				return caps;
 		}
 	}
@@ -1705,6 +1709,10 @@ void MapView::refreshOverlays()
 					radar->setComponents(RadarOverlayItem::Fov);
 				else if (type == LookRay)
 					radar->setComponents(RadarOverlayItem::LookRay);
+				else if (type == Maws)
+					radar->setComponents(RadarOverlayItem::MawsRay);
+				else if (type == Rwr)
+					radar->setComponents(RadarOverlayItem::RwrRing);
 				else
 					radar->setComponents(RadarOverlayItem::Contacts);
 				item = radar;
